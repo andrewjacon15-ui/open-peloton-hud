@@ -1,0 +1,75 @@
+name: Release
+
+# Push a tag like v0.2.0 to build the release APK and publish peloton-hud-v0.2.0.zip (APK + installers + guide) on the Releases page.
+# The APK is signed with the stable key from the repository secrets (docs/RELEASING.md); without them the workflow stops rather than
+# publishing an APK that could never be updated in place.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - run: npm ci
+      - run: npm run verify # also builds dist/, which the APK bundles
+      - name: Android SDK packages
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.1.0" > /dev/null
+      - name: Signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.HUD_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then echo "::error::Add the HUD_KEYSTORE_B64 secret first (docs/RELEASING.md)."; exit 1; fi
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          echo "HUD_KEYSTORE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+      - name: Build the release APK
+        env:
+          HUD_KEYSTORE_PASSWORD: ${{ secrets.HUD_KEYSTORE_PASSWORD }}
+          HUD_KEY_ALIAS: ${{ secrets.HUD_KEY_ALIAS }}
+          HUD_KEY_PASSWORD: ${{ secrets.HUD_KEY_PASSWORD }}
+          HUD_VERSION_NAME: ${{ github.ref_name }}
+          HUD_VERSION_CODE: ${{ github.run_number }}
+        run: node scripts/android.mjs testDebugUnitTest assembleRelease
+      - name: Package
+        run: |
+          NAME="peloton-hud-${GITHUB_REF_NAME}"
+          mkdir -p "out/$NAME"
+          cp android/app/build/outputs/apk/release/app-release.apk "out/$NAME/peloton-hud.apk"
+          cp installer/* docs/INSTALL.md LICENSE "out/$NAME/"
+          # A place for users to drop their own media-app installers; the installer sideloads whatever fits their tablet. No apps are shipped.
+          mkdir -p "out/$NAME/apps"
+          printf '%s\n' \
+            'Put media-app installer files in THIS folder before running the installer, then turn each app on' \
+            'in the HUD under Settings -> Apps. Only Netflix comes on the bike; everything else you add here.' \
+            '' \
+            'Two kinds of file work (get them from a trusted source such as apkmirror.com, the phone/tablet app,' \
+            'NOT the "Android TV" one):' \
+            '  - a single .apk   (pick the variant for your tablet CPU, shown in Settings -> Apps, or a universal/nodpi one)' \
+            '  - a split bundle  (.apkm / .xapk / .apks) -- the installer unpacks it and picks the parts that fit your tablet' \
+            '' \
+            'Apps are specific to the tablet: a file that worked on another bike may not fit yours. The installer' \
+            'reads your tablet and skips anything that does not match. Examples that run without Google services:' \
+            'Disney+, Hulu, Max, Prime Video, Kindle, and SmartTube (a Google-services-free YouTube).' > "out/$NAME/apps/README.txt"
+          chmod +x "out/$NAME/install.sh" "out/$NAME/install-mac.command" "out/$NAME/hud-setup.sh"
+          (cd out && zip -qr "$NAME.zip" "$NAME")
+          (cd out && sha256sum "$NAME.zip" > "$NAME.zip.sha256")
+          echo "ZIP=out/$NAME.zip" >> "$GITHUB_ENV"
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" "$ZIP" "$ZIP.sha256" \
+            --title "Peloton HUD $GITHUB_REF_NAME" \
+            --notes "Download the zip, unzip it, and follow INSTALL.md inside (or docs/INSTALL.md in the repo). No account, no cloud."

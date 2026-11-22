@@ -1,0 +1,9 @@
+# One line ending for everyone: LF, whatever the machine.
+* text=auto eol=lf
+*.png binary
+*.ico binary
+*.jar binary
+*.apk binary
+# Windows launchers need CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf

@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Commits go straight to main in this repository, so the one check that matters before anything leaves this computer runs here:
+# no credential, signing key or built APK in what is pushed. The rest is `npm run verify`, before you push.
+node scripts/check-secrets.mjs || exit 1

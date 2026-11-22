@@ -1,0 +1,1739 @@
+/*
+ * Peloton HUD visual system. See docs/STYLE.md for the rationale. In short: near-black ground, one Peloton red used sparingly, hairline
+ * surfaces instead of filled blocks, confident tabular numbers in Space Grotesk, and squared controls with large touch targets for the
+ * bike's touchscreen. Everything reads at 1280×720 dp from the saddle.
+ */
+
+:root {
+  /* Ground and surfaces: warm near-black, surfaces drawn with hairlines rather than big filled panels. */
+  --bg: #0a0a0b;
+  --surface: #131417;
+  --surface-2: #191b1f;
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.16);
+
+  /* Ink. */
+  --text: #f5f6f7;
+  --muted: #9ca0a8;
+  --dim: #6b7078;
+
+  /* The one accent: Peloton red. Used for the primary action, the active state, and live power — not as decoration. */
+  --red: #e3202b;
+  --red-hi: #ff2f3a;
+  --ok: #39d98a;
+
+  --r: 10px;
+  --r-lg: 14px;
+  --gap: 14px;
+
+  /* Type: a deliberate pairing. Oswald (condensed, athletic — like speedometer/broadcast type) for the chrome and the brand; Archivo
+     (a warm grotesque with real tabular figures) for the metrics and body, so live numbers stay rock-steady. */
+  --font: 'Archivo Variable', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Oswald Variable', 'Archivo Variable', system-ui, sans-serif;
+
+  color-scheme: dark;
+  font-family: var(--font);
+  font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Chrome and labels in the display face; numbers and body stay in Archivo. */
+h1,
+h2,
+h3,
+.stat-label,
+.bstat-label,
+.cta-text,
+.tab,
+.settings-heading {
+  font-family: var(--font-display);
+}
+
+* {
+  box-sizing: border-box;
+  /* Kill the WebView's blue/grey tap-highlight rectangle behind buttons on the bike's touch screen (keyboard focus rings are kept
+     separately via :focus-visible). */
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  margin: 0;
+  color: var(--text);
+  background:
+    radial-gradient(1200px 600px at 78% -10%, rgba(227, 32, 43, 0.14), transparent 60%),
+    var(--bg);
+  min-height: 100vh;
+}
+
+h1,
+h2,
+h3 {
+  letter-spacing: -0.01em;
+}
+
+/* ---------------------------------------------------------------- home ---- */
+.app {
+  padding: 28px 32px 56px;
+  max-width: 1180px;
+  margin: 0 auto;
+}
+
+.home-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Secondary-screen header (Rides, Settings, History, ride detail): a bordered Back button + title, with an optional right subtitle.
+   Rendered by ScreenHeader so every non-home screen puts Back and the title in the same spot. The home screen uses .home-head instead. */
+.screen-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 28px;
+}
+.screen-head-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.screen-head-right {
+  font-size: 14px;
+}
+/* The Back button: a surface pill with a hairline and a chevron — the sibling of the home header's settings gear, not an underlined link. */
+.back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 44px;
+  padding: 0 16px 0 11px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 16px;
+}
+.back-btn:hover {
+  background: var(--surface-2);
+}
+.back-btn:active {
+  transform: translateY(1px);
+}
+
+/* Header right cluster: the sensor/version status and the gear that opens the settings screen. */
+.home-head-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.head-settings {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: 11px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--muted);
+}
+.head-settings:hover {
+  color: var(--text);
+}
+
+.brand-mark {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: linear-gradient(145deg, var(--red-hi), #8f1016);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+  position: relative;
+}
+
+.brand-mark::after {
+  content: '';
+  position: absolute;
+  inset: 7px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  border-right-color: transparent;
+  transform: rotate(-30deg);
+}
+
+h1 {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 600;
+}
+
+h2 {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--muted);
+  margin: 28px 0 14px;
+  letter-spacing: 0.01em;
+}
+
+.muted {
+  color: var(--muted);
+  margin: 0;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Live gauges: the four big primary numbers. */
+.live {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--gap);
+  margin: 26px 0;
+}
+
+.stat {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.stat-label {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.stat-value {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  font-size: 30px;
+  line-height: 1;
+}
+
+.stat-lg .stat-value {
+  font-size: 52px;
+  letter-spacing: -0.02em;
+}
+
+/* The live power gauge leads with red. */
+.live .stat:first-child {
+  border-color: rgba(227, 32, 43, 0.4);
+}
+.live .stat:first-child .stat-value {
+  color: #ff5a62;
+}
+
+.stat-unit {
+  font-size: 0.42em;
+  font-weight: 600;
+  color: var(--muted);
+  margin-left: 2px;
+}
+
+/* Secondary metric grid (ride summary). */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--gap);
+}
+
+.grid .stat {
+  background: var(--surface-2);
+}
+
+.controls {
+  display: flex;
+  gap: 12px;
+  margin: 24px 0 4px;
+  flex-wrap: wrap;
+}
+
+/* The three front-screen calls to action: start a ride, YouTube, or Netflix. Equal-sized boxes; each visually distinct. */
+/* Mirror the four-up live stat grid directly above: same columns, same gutter, same full width, so each action sits under a stat tile. */
+/* Start ride is the home screen's primary action, full width above the app grid. */
+.cta-primary {
+  margin: 22px 0 14px;
+}
+.cta-primary .cta-ride {
+  width: 100%;
+  min-height: 72px;
+  font-size: 21px;
+}
+
+/* The media-app launchers: an even 4-up grid of brand-coloured tiles (no ragged last row). Each tile's --brand is set inline from the app. */
+.app-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--gap);
+  margin-bottom: 12px;
+}
+.app-tile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 66px;
+  padding: 0 16px;
+  border-radius: 14px;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text);
+  background: color-mix(in srgb, var(--brand) 13%, var(--surface-2));
+  border: 1px solid color-mix(in srgb, var(--brand) 42%, transparent);
+  box-shadow: inset 0 -3px 0 -1px var(--brand);
+  transition:
+    transform 0.06s ease,
+    background 0.12s ease;
+}
+.app-tile:hover {
+  background: color-mix(in srgb, var(--brand) 22%, var(--surface-2));
+}
+.app-tile:active {
+  transform: translateY(1px);
+}
+.app-mark {
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: var(--brand);
+  color: #fff;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.02em;
+}
+.app-name {
+  font-family: var(--font-display);
+  font-size: 17px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 68px;
+  padding: 0 20px;
+  border-radius: 14px;
+  font-size: 19px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition:
+    transform 0.06s ease,
+    background 0.12s ease,
+    border-color 0.12s ease;
+}
+.cta:active {
+  transform: translateY(1px);
+}
+
+.cta-ico {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Start ride: solid Peloton red, the primary move. */
+.cta-ride {
+  background: var(--red);
+  color: #fff;
+  box-shadow: 0 6px 24px -10px rgba(227, 32, 43, 0.8);
+}
+.cta-ride:hover {
+  background: var(--red-hi);
+}
+
+/* Stop ride: the same primary slot, but a quiet dark surface with a red glyph — stopping is deliberate, not the inviting red fill. */
+.cta-ride.cta-stop {
+  background: var(--surface-2);
+  border-color: var(--line-strong);
+  color: var(--text);
+  box-shadow: none;
+}
+.cta-ride.cta-stop:hover {
+  background: #22252b;
+}
+.cta-ride.cta-stop .cta-ico {
+  color: var(--red);
+}
+
+/* ---------------------------------------------------------- buttons ---- */
+button {
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  padding: 11px 20px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r);
+  background: var(--surface-2);
+  color: var(--text);
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    transform 0.06s ease;
+}
+
+button:hover {
+  border-color: var(--line-strong);
+  background: #22252b;
+}
+
+button:active {
+  transform: translateY(1px);
+}
+
+button.primary {
+  background: var(--red);
+  border-color: var(--red);
+  color: #fff;
+}
+button.primary:hover {
+  background: var(--red-hi);
+  border-color: var(--red-hi);
+}
+
+button.big {
+  padding: 15px 30px;
+  font-size: 17px;
+  border-radius: 12px;
+  min-height: 52px;
+}
+
+button.ghost {
+  background: transparent;
+  border-color: var(--line);
+  color: var(--text);
+}
+button.ghost:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+button.danger {
+  background: transparent;
+  border-color: rgba(227, 32, 43, 0.5);
+  color: #ff6b73;
+}
+button.danger:hover {
+  background: rgba(227, 32, 43, 0.12);
+}
+
+button.link {
+  background: none;
+  border: 0;
+  color: var(--muted);
+  padding: 6px 0;
+  font-size: 14px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+button.link:hover {
+  color: var(--text);
+  background: none;
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+  transform: none;
+}
+
+/* Power-zone bars. */
+.zones {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  height: 120px;
+  margin-top: 16px;
+}
+
+.zone-bar {
+  flex: 1;
+  height: 100%;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  overflow: hidden;
+}
+
+.zone-fill {
+  width: 100%;
+  border-radius: 7px 7px 0 0;
+}
+
+.zone-tag {
+  position: absolute;
+  bottom: 4px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.ride-panel {
+  margin-top: 8px;
+}
+
+.settings {
+  margin-top: 24px;
+}
+
+.settings-body {
+  display: flex;
+  gap: 22px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.settings label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.settings input,
+.settings select {
+  font: inherit;
+  font-size: 15px;
+  padding: 9px 11px;
+  border-radius: var(--r);
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--text);
+  width: 220px;
+}
+
+.weight-row {
+  display: flex;
+  gap: 8px;
+}
+
+.weight-row input {
+  width: 140px;
+}
+
+.weight-row select {
+  width: 76px;
+}
+
+/* Volume + brightness — the controls the Peloton bar used to give, now that the HUD runs full screen. */
+.device-controls {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 18px 0 2px;
+}
+
+.device-controls .ctrl {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  flex: 1 1 260px;
+  min-width: 200px;
+  color: var(--muted);
+}
+
+.device-controls input[type='range'] {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+}
+
+.device-controls input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--text);
+  cursor: pointer;
+}
+
+.recent ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.recent li {
+  list-style: none;
+}
+.recent-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.recent-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr 1fr;
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  padding: 11px 16px;
+  font-variant-numeric: tabular-nums;
+  font-size: 14px;
+  color: var(--text);
+  text-align: left;
+}
+.recent-row:active {
+  background: var(--surface-2);
+}
+
+/* ------------------------------------------------- history + detail ---- */
+.history-list {
+  list-style: none;
+  margin: 10px 0 24px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.history-list li {
+  list-style: none;
+}
+.history-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr 1fr 2fr;
+  gap: 12px;
+  align-items: baseline;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  padding: 12px 16px;
+  color: var(--text);
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+  font-size: 14px;
+}
+.history-row:active {
+  background: var(--surface-2);
+}
+.history-media {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ride-charts {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin: 8px 0 24px;
+}
+.chart {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.chart-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.chart-label {
+  font-family: var(--font-display);
+  font-size: 16px;
+}
+.chart-svg {
+  width: 100%;
+  height: 120px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+}
+.chart-area {
+  opacity: 0.14;
+}
+.chart-line {
+  fill: none;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+[role='alert'] {
+  color: #ff6b73;
+}
+
+/* ------------------------------------------------- ride screen ---- */
+.ride {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent);
+}
+
+.bar-stats {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.bstat {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  padding: 2px 12px;
+  border-left: 1px solid var(--line);
+}
+.bstat:first-child {
+  border-left: 0;
+  padding-left: 0;
+}
+
+.bstat-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--dim);
+}
+
+.bstat-value {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.bstat.strong .bstat-value {
+  font-size: 26px;
+}
+
+.bstat-unit {
+  font-size: 0.5em;
+  color: var(--muted);
+  margin-left: 2px;
+}
+
+/* Live power leads with red on the bar too. */
+.bar-stats .bstat:nth-child(2) .bstat-value {
+  color: #ff5a62;
+}
+
+.bar-controls {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.bar-controls button {
+  padding: 10px 16px;
+  font-size: 14px;
+}
+
+.stage {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  overflow: hidden;
+}
+
+.player {
+  position: absolute;
+  inset: 0;
+  background: #000;
+  overflow: hidden;
+  container-type: size;
+}
+
+/* Cover the stage with the 16:9 video (scale to fill, crop the overflow) instead of letterboxing it with black bars — a full-bleed scenic
+   ride. Sized in container-query units so it covers whatever the stage aspect is (wider or taller than 16:9). */
+.player iframe {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: max(100cqw, 177.78cqh);
+  height: max(56.25cqw, 100cqh);
+  border: 0;
+}
+
+/* Ride stage browser: a slim "switch to Netflix / Kindle" row above the YouTube browser, so you can change what's on screen without
+   leaving the ride — recording keeps running behind whatever you pick. */
+.stage-browse {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.stage-launch {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 18px 0;
+}
+.stage-launch-label {
+  color: var(--muted);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.chip {
+  padding: 8px 18px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 15px;
+}
+.chip:active {
+  background: #22252b;
+}
+
+/* ------------------------------------------------ power plan over media ---- */
+/* A power plan (guide) is a layer over whatever media is on: the full workout stage on a blank screen, a compact gauge over a video. */
+.guided-stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+/* "Ride with a view" launcher under the workout stage — pick a scenic route (or Netflix/Kindle) to ride the plan over. */
+.guide-views {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px 28px 2px;
+}
+.guide-views-label {
+  color: var(--muted);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.guide-views-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* The compact plan floating over a video (the web twin of the native gauge over Netflix/Kindle). */
+.guide-ov {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 4;
+  width: 152px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--line-strong);
+  background: rgba(10, 10, 11, 0.82);
+  backdrop-filter: blur(6px);
+}
+.guide-ov-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.guide-ov-title {
+  font-family: var(--font-display);
+  font-size: 14px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.guide-ov-close {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--muted);
+  font-size: 13px;
+}
+.guide-ov-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.guide-ov-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.guide-ov-time {
+  color: var(--muted);
+}
+/* Compact gauge: fills the floating panel's width with a shorter track. */
+.wk-gauge.compact {
+  width: 100%;
+}
+.wk-gauge.compact .wk-gauge-track {
+  min-height: 150px;
+}
+
+/* "＋ Power plan" control over an unguided video — tap to pick a workout to ride over it. */
+.guide-add {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 4;
+}
+.guide-add-btn {
+  padding: 9px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: rgba(10, 10, 11, 0.82);
+  backdrop-filter: blur(6px);
+  color: var(--text);
+  font-size: 14px;
+}
+.guide-add-menu {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 6px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--line-strong);
+  background: rgba(10, 10, 11, 0.92);
+  backdrop-filter: blur(6px);
+  min-width: 180px;
+}
+.guide-add-menu li {
+  margin: 0;
+}
+.guide-add-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font-size: 15px;
+}
+.guide-add-menu button:active {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* ---------------------------------------------------------- rides ---- */
+/* Full-width secondary action on the home screen (keeps the four quick-action tiles aligned with the stats row above). */
+.cta-wide {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 60px;
+  margin: 2px 0 8px;
+  padding: 0 20px;
+  border-radius: 14px;
+  font-family: var(--font-display);
+  font-size: 18px;
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
+  color: var(--text);
+}
+.cta-wide:active {
+  transform: translateY(1px);
+}
+.cta-rides {
+  box-shadow: inset 0 -3px 0 -1px #2fbf71; /* green accent — the "ride structured" option */
+}
+.cta-rides .cta-ico {
+  color: #2fbf71;
+}
+
+.ride-list {
+  list-style: none;
+  margin: 10px 0 24px;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--gap);
+}
+.ride-card {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 64px;
+  padding: 0 20px;
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--text);
+  text-align: left;
+}
+.ride-card:active {
+  background: var(--surface-2);
+}
+/* Secondary full-width card (e.g. "ride over any YouTube video"): spans the grid and reads a touch quieter than a route card. */
+.ride-card-wide {
+  grid-column: 1 / -1;
+  margin-top: 4px;
+  border-style: dashed;
+}
+.ride-card-title {
+  font-family: var(--font-display);
+  font-size: 18px;
+}
+.ride-card-meta {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Settings → Apps: a simple checkbox list of the known media apps. */
+.apps-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.apps-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 40px;
+}
+.apps-row label {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  color: var(--text);
+  font-size: 16px;
+}
+.apps-row input[type='checkbox'] {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--red);
+}
+.apps-row input[type='checkbox']:disabled {
+  cursor: default;
+}
+
+/* ------------------------------------------------- workout player ---- */
+.workout {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 22px 28px;
+}
+.workout-done {
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+.wk-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+.wk-kind {
+  font-family: var(--font-display);
+  font-size: 22px;
+  letter-spacing: 0.02em;
+}
+.wk-interval,
+.wk-cooldown,
+.wk-warmup,
+.wk-rest,
+.wk-steady {
+  color: var(--text);
+}
+.wk-interval {
+  color: #e3202b;
+}
+.wk-rest {
+  color: #2fbf71;
+}
+.wk-total {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.wk-target {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  justify-content: center;
+  gap: 36px;
+  padding: 22px 28px;
+  border-radius: var(--r-lg);
+  border: 2px solid var(--line);
+  background: var(--surface);
+}
+/* On the workout stage the gauge is the hero and grows to fill the width; the target text sits beside it. */
+.wk-target .wk-gauge {
+  flex: 1;
+  min-width: 0;
+}
+.wk-target-text {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+/* The vertical power meter: a track with the allowable band highlighted and a marker that rides up/down with live power (PowerGauge). */
+/* Live power trace: green when in the band, red when out (currentColor drives the trace, band and dot). */
+.wk-gauge {
+  flex: none;
+  width: 100%;
+  color: #2fbf71;
+}
+.wk-gauge[data-in='false'] {
+  color: #e3202b;
+}
+.wk-gauge-plot {
+  position: relative;
+  width: 100%;
+  height: 260px;
+  border-radius: 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  overflow: hidden;
+  /* A faint grid so the trace has something to read against on the bare stage. */
+  background-image: linear-gradient(to right, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(to top, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 12.5% 25%;
+}
+.wk-gauge.compact .wk-gauge-plot {
+  height: 150px;
+  border-radius: 12px;
+}
+.wk-gauge-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+/* The target zone stays green whether or not you're in it — it's where you want to be; only the trace/dot change color. */
+.wk-gauge-band {
+  fill: rgba(47, 191, 113, 0.16);
+  transition: y 160ms ease, height 160ms ease;
+}
+.wk-gauge-targetline {
+  stroke: rgba(47, 191, 113, 0.65);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+  transition: y1 160ms ease, y2 160ms ease;
+}
+.wk-gauge-trace {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 4px color-mix(in srgb, currentColor 45%, transparent));
+  transition: stroke 160ms ease;
+}
+.wk-gauge-dot {
+  position: absolute;
+  right: 0;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 22%, transparent);
+  transform: translate(50%, -50%);
+  transition: top 140ms ease-out; /* the "hover up and down" */
+}
+.wk-gauge.compact .wk-gauge-dot {
+  width: 11px;
+  height: 11px;
+}
+/* Big live readout, top-left of the plot. */
+.wk-gauge-readout {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+  color: var(--text);
+}
+.wk-gauge-now {
+  font-family: var(--font-display);
+  font-size: 40px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.wk-gauge.compact .wk-gauge-now {
+  font-size: 26px;
+}
+.wk-gauge-unit {
+  font-size: 15px;
+  color: var(--muted);
+}
+.wk-gauge.compact .wk-gauge-unit {
+  font-size: 12px;
+}
+.wk-gauge-target-label {
+  position: absolute;
+  right: 6px;
+  padding: 0 5px;
+  transform: translateY(-50%);
+  font-size: 11px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--surface-2) 85%, transparent);
+  border-radius: 4px;
+  font-variant-numeric: tabular-nums;
+  transition: top 160ms ease;
+  pointer-events: none;
+}
+/* On/under/over the target, by live power vs. target watts (set in WorkoutPlayer). */
+.wk-target[data-state='in'] {
+  border-color: #2fbf71;
+  background: rgba(47, 191, 113, 0.08);
+}
+.wk-target[data-state='under'] {
+  border-color: #e8a33d;
+  background: rgba(232, 163, 61, 0.07);
+}
+.wk-target[data-state='over'] {
+  border-color: #e3202b;
+  background: rgba(227, 32, 43, 0.08);
+}
+.wk-target-main {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.wk-target-val {
+  font-family: var(--font-display);
+  font-size: clamp(64px, 12vw, 120px);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.wk-target-unit {
+  color: var(--muted);
+  font-size: 22px;
+}
+.wk-live {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  color: var(--muted);
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+.wk-live-power {
+  color: var(--text);
+}
+.wk-seg {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.wk-seg-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  font-variant-numeric: tabular-nums;
+}
+.wk-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+.wk-bar-overall {
+  height: 5px;
+  opacity: 0.7;
+}
+.wk-bar-fill {
+  height: 100%;
+  background: var(--text);
+  transition: width 0.4s ease;
+}
+.wk-ftp-hint {
+  text-align: center;
+  font-size: 14px;
+}
+
+.stage-note {
+  margin: auto;
+  text-align: center;
+  color: var(--muted);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  align-items: center;
+}
+
+/* ------------------------------------------------- youtube browser ---- */
+.browser {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 14px 18px 0;
+  overflow: hidden;
+}
+
+.browser-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px;
+}
+
+.tab {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 9px 20px;
+  font-size: 14px;
+}
+.tab:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+.tab.on {
+  background: var(--text);
+  color: #111;
+}
+.tab.on:hover {
+  background: #fff;
+}
+
+.search {
+  display: flex;
+  gap: 8px;
+  flex: 1;
+  min-width: 260px;
+  max-width: 560px;
+}
+
+.search input {
+  flex: 1;
+  font: inherit;
+  font-size: 15px;
+  padding: 11px 15px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--text);
+}
+.search input:focus {
+  outline: none;
+  border-color: var(--line-strong);
+  background: var(--surface-2);
+}
+
+/* The scrolling video grid. */
+.vgrid {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 16px;
+  padding-bottom: 16px;
+  align-content: start;
+}
+
+.vcard {
+  all: unset;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-radius: 12px;
+}
+.vcard:focus-visible {
+  outline: 2px solid var(--red);
+  outline-offset: 3px;
+}
+
+.vthumb {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+}
+.vthumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.18s ease;
+}
+.vcard:hover .vthumb img {
+  transform: scale(1.04);
+}
+
+.vdur {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  background: rgba(0, 0, 0, 0.85);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+
+.vmeta {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 0 2px;
+}
+
+.vtitle {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.vsub {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.vsub.dim {
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.browser-note {
+  padding: 24px 2px;
+  color: var(--muted);
+}
+
+.dim {
+  color: var(--dim);
+}
+
+.verror {
+  color: #ff6b73;
+}
+
+/* Subscription management (in Settings). */
+.settings-section {
+  flex-basis: 100%;
+  margin-top: 8px;
+}
+.settings-heading {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.subs-settings {
+  max-width: 680px;
+}
+/* The Device section's way-out buttons. */
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.sensor-actions {
+  margin-top: 10px;
+}
+.settings-note {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+  margin: 10px 0 0;
+  max-width: 680px;
+}
+.subs-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 14px;
+}
+.subs-manage {
+  margin-top: 10px;
+}
+.subs-manage p {
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0 0 10px;
+}
+.subs-manage textarea {
+  width: 100%;
+  font: inherit;
+  font-size: 14px;
+  padding: 12px 14px;
+  border-radius: var(--r);
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--text);
+  resize: vertical;
+}
+.subs-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+.filebtn {
+  display: inline-flex;
+  align-items: center;
+  padding: 11px 18px;
+  border-radius: var(--r);
+  border: 1px solid var(--line-strong);
+  background: var(--surface-2);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.filebtn input {
+  display: none;
+}
+
+/* Paste-a-link escape hatch at the bottom of the browser. */
+.paste {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0 12px;
+  border-top: 1px solid var(--line);
+}
+.paste input {
+  flex: 1;
+  max-width: 420px;
+  font: inherit;
+  font-size: 14px;
+  padding: 9px 13px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+}
+.paste .verror {
+  font-size: 13px;
+}
+
+@media (max-width: 760px) {
+  .live {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .app-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .recent-row {
+    grid-template-columns: 1fr 1fr;
+  }
+  .history-row {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+  .bstat-value {
+    font-size: 19px;
+  }
+  .bstat.strong .bstat-value {
+    font-size: 22px;
+  }
+}
+
+/* Video overlay bar — deliberately the same design as the native Netflix stats strip (NetflixOverlay.kt): slim, near-black, hairline,
+   condensed muted labels, steady tabular values, Peloton red reserved for live power. Shown while a YouTube video plays (RideView). */
+.obar {
+  position: relative; /* anchor for the volume/brightness popout */
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 9px 14px 9px 22px;
+  background: #0a0a0b;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+.obar-stats {
+  display: flex;
+  align-items: flex-end;
+  gap: clamp(18px, 4vw, 44px);
+}
+.obar-stat {
+  display: flex;
+  flex-direction: column;
+}
+.obar-label {
+  color: #9ca0a8;
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+.obar-value {
+  color: #f5f6f7;
+  font-size: 25px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+}
+.obar-value.power {
+  color: #e3202b;
+}
+.obar-unit {
+  margin-left: 3px;
+  color: #9ca0a8;
+  font-size: 13px;
+  font-weight: 500;
+}
+/* The ride's average power, set small and muted right next to the live power number. */
+.obar-avg {
+  margin-left: 8px;
+  color: #9ca0a8;
+  font-size: 13px;
+  font-weight: 500;
+}
+.obar-controls {
+  display: flex;
+  flex: none;
+  gap: 8px;
+}
+.obar-btn {
+  padding: 10px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 10px;
+  background: transparent;
+  color: #f5f6f7;
+  font-size: 15px;
+}
+.obar-btn:active {
+  background: rgba(255, 255, 255, 0.06);
+}
+/* Square icon buttons (Back, Home, sliders) — same hairline ghost as the text buttons, sized for a glance-and-tap from the saddle. */
+.obar-btn.obar-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  padding: 10px 0;
+  color: #f5f6f7;
+}
+/* Start/Stop carry the one red accent: a filled start to invite it, a hairline stop with a red glyph to make ending deliberate. */
+.obar-btn.start {
+  background: var(--red);
+  border-color: var(--red);
+  color: #fff;
+  font-weight: 600;
+}
+.obar-btn.start:active {
+  background: var(--red-hi);
+}
+.obar-btn.stop {
+  color: #ff5a62;
+  font-weight: 600;
+}
+
+/* The volume/brightness popout — the same sliders the home screen has, dropped below the sliders button and kept in sync with the device. */
+.obar-levels {
+  position: absolute;
+  top: 100%;
+  right: 12px;
+  z-index: 5;
+  margin-top: 6px;
+  width: min(360px, calc(100vw - 24px));
+  padding: 14px 16px;
+  background: #121316;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  box-shadow: 0 18px 40px -16px rgba(0, 0, 0, 0.75);
+}
+/* Compact variant: stack the two sliders in the popout instead of the home screen's side-by-side row. */
+.device-controls.compact {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
+  margin: 0;
+}
+.device-controls.compact .ctrl {
+  flex: 1 1 auto;
+  min-width: 0;
+}

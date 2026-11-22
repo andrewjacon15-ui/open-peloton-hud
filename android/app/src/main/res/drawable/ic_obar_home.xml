@@ -1,0 +1,21 @@
+<!-- House glyph for the entertainment overlay's Home button. A native copy of the web ride bar's HomeIcon (src/ui/RideView.tsx):
+     same 24-unit viewBox, same two strokes (roof then body), round caps/joins. Tinted at draw time (setColorFilter), so the color
+     here is only a fallback. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="18dp"
+    android:height="18dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M4 11l8 -7 8 7"
+        android:strokeColor="#F5F6F7"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M6 10v9h12v-9"
+        android:strokeColor="#F5F6F7"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

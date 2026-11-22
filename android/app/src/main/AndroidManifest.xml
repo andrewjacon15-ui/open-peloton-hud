@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!-- Drawing the stats frame over Netflix. Granted once over adb: the bike script, setup command (scripts/bike.mjs) -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!-- Kiosk guard reads which app is foregrounded so it can pull the HUD back. Granted over adb (bike script, setup). -->
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:ignore="ProtectedPermissions" />
+    <!-- Screen-brightness control (the HUD's slider that replaced the Peloton bar). Granted over adb (bike script, setup). -->
+    <uses-permission android:name="android.permission.WRITE_SETTINGS" tools:ignore="ProtectedPermissions" />
+    <!-- Optional Bluetooth LE power meter / cadence sensor (BleSource), for bikes whose built-in sensor can't be read. On Android 11 a BLE
+         scan needs location permission (granted by the installer, or asked for on the first scan); nothing here uses location itself. -->
+    <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
+
+    <!-- Android 11 package visibility: the services and media apps we bind to or launch. The media packages mirror the web catalog
+         (src/media/apps.ts); the shell checks which are installed (queryApps) and launches them (openApp). -->
+    <queries>
+        <package android:name="com.onepeloton.affernetservice" />
+        <package android:name="com.peloton.service.SensorData" />
+        <package android:name="com.netflix.mediaclient" />
+        <package android:name="com.google.android.youtube" />
+        <package android:name="com.amazon.avod.thirdpartyclient" />
+        <package android:name="com.disney.disneyplus" />
+        <package android:name="com.wbd.stream" />
+        <package android:name="com.hulu.plus" />
+        <package android:name="org.smarttube.beta" />
+        <package android:name="com.amazon.kindle" />
+        <!-- Every home app, so "Open Peloton app" can find Peloton's launcher on whatever build this is (PelotonApps). -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.HOME" />
+        </intent>
+    </queries>
+
+    <application
+        android:label="Peloton HUD"
+        android:icon="@android:drawable/ic_media_play"
+        android:usesCleartextTraffic="true"
+        android:theme="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:screenOrientation="landscape"
+            android:windowSoftInputMode="adjustResize"
+            android:configChanges="orientation|screenSize|keyboardHidden">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+                <!-- Also a HOME app, so the bike can boot into the HUD instead of Peloton's launcher. Inert until the bike
+                     script's "home" command makes it the default; the "unhome" command reverses it. -->
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <!-- Kiosk guard: keeps the bike on the HUD if a Peloton app foregrounds itself. Started by MainActivity. -->
+        <service
+            android:name=".GuardService"
+            android:exported="false" />
+
+        <!-- Started only by adb (the bike script, probe command) to check which sensor services will let us bind. -->
+        <activity
+            android:name=".ProbeActivity"
+            android:exported="true" />
+
+        <!-- Started only by adb (the bike script, sniff command) to read live data off the SensorData service. -->
+        <activity
+            android:name=".SniffActivity"
+            android:exported="true" />
+    </application>
+</manifest>
