@@ -84,7 +84,7 @@ export function useMedia() {
   // (e.g. skipping Netflix's membership-gated wrapper), so we only hand it the package.
   const openApp = useCallback((app: MediaApp, seed?: OverlaySeed) => {
     setMedia({ kind: 'app', title: app.name, pkg: app.pkg })
-    bridge.send({ type: 'openApp', pkg: app.pkg, ...seed })
+    bridge.send({ type: 'openApp', pkg: app.pkg, hidesNav: app.hidesNav, ...seed })
   }, [bridge])
 
   const close = useCallback(() => {

@@ -11,6 +11,7 @@ import { RideDetailView } from './ui/RideDetailView'
 import { watchSensors } from './ui/useSensors'
 import { useInstalledApps } from './media/useApps'
 import { enabledApps, type MediaApp } from './media/apps'
+import { customMediaApps, useCustomApps } from './media/customApps'
 import { SCENIC_RIDES, type Workout } from './rides/rides'
 import type { StoredRide } from './ride/storage'
 
@@ -29,10 +30,14 @@ export function App() {
   // Which media apps to show: installed on the bike (the shell reports) and enabled in Settings. Recomputed each render, so toggling an app
   // in Settings takes effect the moment you come back. Empty until the shell answers (an older shell, or still connecting).
   const installedApps = useInstalledApps()
-  const apps = enabledApps(installedApps ?? new Set())
+  // User-added apps (Settings → Apps "Add an app") are installed by definition and always enabled, so they append to the catalog tiles.
+  const customApps = customMediaApps(useCustomApps())
+  const catalogApps = enabledApps(installedApps ?? new Set())
+  const apps = [...catalogApps, ...customApps]
   // Apps with a native app actually installed — the ones the ride screen can "switch to" natively. (A web-player app with no native app,
-  // e.g. YouTube on a bike with no Play Services, is reached through the in-HUD player instead, so it isn't a native switch target.)
-  const nativeApps = apps.filter((a) => installedApps?.has(a.pkg) ?? false)
+  // e.g. YouTube on a bike with no Play Services, is reached through the in-HUD player instead, so it isn't a native switch target.) Custom
+  // apps are always real installed apps, so they're always native switch targets.
+  const nativeApps = [...catalogApps.filter((a) => installedApps?.has(a.pkg) ?? false), ...customApps]
   const [view, setView] = useState<'home' | 'media' | 'rides' | 'history' | 'settings'>('home')
   const [detail, setDetail] = useState<StoredRide | null>(null)
   const [workout, setWorkout] = useState<Workout | null>(null)

@@ -10,6 +10,9 @@ dist
 .private-patterns
 # Your own data baked into your build, never committed (e.g. src/media/defaultSubscriptions.local.ts).
 *.local.ts
+# Media-app launcher logos: proprietary brand icons, kept out of the repo like the APKs. Present in your local build (shown on the home
+# tiles); absent elsewhere, where the tiles fall back to each app's short mark (src/media/apps.ts, HomeView AppTileIcon).
+public/logos/
 
 # Android
 android/.gradle/

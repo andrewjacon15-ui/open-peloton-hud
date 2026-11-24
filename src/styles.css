@@ -26,6 +26,24 @@
   --r-lg: 14px;
   --gap: 14px;
 
+  /* Button/box sizing scale — the home screen's controls are built from these so boxes stay proportional to one another (no odd one-offs):
+     --cta-h  the full-width primary action rows (Start ride and the Rides button, which must match);
+     --tile-h the media-app launcher tiles;
+     --btn-h  standard buttons and controls. */
+  --cta-h: 72px;
+  --tile-h: 66px;
+  --btn-h: 48px;
+
+  /* Type scale (px). Chrome, titles and labels use --font-display (Oswald); live numbers and body use --font (Archivo). Pick the nearest
+     step rather than a one-off size, so text stays on a consistent ladder. (Big live-stat numbers have their own sizes in the Stat component.) */
+  --fs-title: 26px; /* screen / brand titles (h1) */
+  --fs-cta: 21px; /* the full-width primary action rows — Start ride and the Rides button (a matched pair) */
+  --fs-lg: 17px; /* launcher tile names, prominent controls */
+  --fs-md: 15px; /* standard buttons, chips, body controls */
+  --fs-body: 14px; /* running text, status lines, list rows */
+  --fs-sm: 13px; /* secondary notes and captions */
+  --fs-label: 11px; /* uppercase micro-labels (POWER, CADENCE, …) */
+
   /* Type: a deliberate pairing. Oswald (condensed, athletic — like speedometer/broadcast type) for the chrome and the brand; Archivo
      (a warm grotesque with real tabular figures) for the metrics and body, so live numbers stay rock-steady. */
   --font: 'Archivo Variable', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
@@ -73,7 +91,7 @@ h3 {
 
 /* ---------------------------------------------------------------- home ---- */
 .app {
-  padding: 28px 32px 56px;
+  padding: 6px 32px 40px;
   max-width: 1180px;
   margin: 0 auto;
 }
@@ -108,7 +126,7 @@ h3 {
   gap: 16px;
 }
 .screen-head-right {
-  font-size: 14px;
+  font-size: var(--fs-body);
 }
 /* The Back button: a surface pill with a hairline and a chevron — the sibling of the home header's settings gear, not an underlined link. */
 .back-btn {
@@ -175,12 +193,12 @@ h3 {
 
 h1 {
   margin: 0;
-  font-size: 26px;
+  font-size: var(--fs-title);
   font-weight: 600;
 }
 
 h2 {
-  font-size: 15px;
+  font-size: var(--fs-md);
   font-weight: 600;
   color: var(--muted);
   margin: 28px 0 14px;
@@ -190,7 +208,7 @@ h2 {
 .muted {
   color: var(--muted);
   margin: 0;
-  font-size: 14px;
+  font-size: var(--fs-body);
   font-variant-numeric: tabular-nums;
 }
 
@@ -214,7 +232,7 @@ h2 {
 
 .stat-label {
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--fs-label);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -269,12 +287,12 @@ h2 {
 /* Mirror the four-up live stat grid directly above: same columns, same gutter, same full width, so each action sits under a stat tile. */
 /* Start ride is the home screen's primary action, full width above the app grid. */
 .cta-primary {
-  margin: 22px 0 14px;
+  margin: 18px 0 var(--gap);
 }
 .cta-primary .cta-ride {
   width: 100%;
-  min-height: 72px;
-  font-size: 21px;
+  min-height: var(--cta-h);
+  font-size: var(--fs-cta);
 }
 
 /* The media-app launchers: an even 4-up grid of brand-coloured tiles (no ragged last row). Each tile's --brand is set inline from the app. */
@@ -288,7 +306,7 @@ h2 {
   display: flex;
   align-items: center;
   gap: 12px;
-  min-height: 66px;
+  min-height: var(--tile-h);
   padding: 0 16px;
   border-radius: 14px;
   cursor: pointer;
@@ -318,12 +336,21 @@ h2 {
   color: #fff;
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 15px;
+  font-size: var(--fs-md);
   letter-spacing: 0.02em;
+}
+/* The app's real launcher logo, sitting on the brand-tinted tile. The icon carries its own background, so just round the corners. */
+.app-logo {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  object-fit: cover;
+  display: block;
 }
 .app-name {
   font-family: var(--font-display);
-  font-size: 17px;
+  font-size: var(--fs-lg);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -383,7 +410,7 @@ h2 {
 /* ---------------------------------------------------------- buttons ---- */
 button {
   font: inherit;
-  font-size: 15px;
+  font-size: var(--fs-md);
   font-weight: 600;
   padding: 11px 20px;
   border: 1px solid var(--line-strong);
@@ -418,7 +445,7 @@ button.primary:hover {
 
 button.big {
   padding: 15px 30px;
-  font-size: 17px;
+  font-size: var(--fs-lg);
   border-radius: 12px;
   min-height: 52px;
 }
@@ -446,7 +473,7 @@ button.link {
   border: 0;
   color: var(--muted);
   padding: 6px 0;
-  font-size: 14px;
+  font-size: var(--fs-body);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
@@ -517,13 +544,13 @@ button:disabled {
   flex-direction: column;
   gap: 6px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--fs-sm);
 }
 
 .settings input,
 .settings select {
   font: inherit;
-  font-size: 15px;
+  font-size: var(--fs-md);
   padding: 9px 11px;
   border-radius: var(--r);
   border: 1px solid var(--line-strong);
@@ -611,7 +638,7 @@ button:disabled {
   border-radius: var(--r);
   padding: 11px 16px;
   font-variant-numeric: tabular-nums;
-  font-size: 14px;
+  font-size: var(--fs-body);
   color: var(--text);
   text-align: left;
 }
@@ -644,7 +671,7 @@ button:disabled {
   color: var(--text);
   text-align: left;
   font-variant-numeric: tabular-nums;
-  font-size: 14px;
+  font-size: var(--fs-body);
 }
 .history-row:active {
   background: var(--surface-2);
@@ -750,7 +777,7 @@ button:disabled {
 }
 
 .bstat.strong .bstat-value {
-  font-size: 26px;
+  font-size: var(--fs-title);
 }
 
 .bstat-unit {
@@ -772,7 +799,7 @@ button:disabled {
 
 .bar-controls button {
   padding: 10px 16px;
-  font-size: 14px;
+  font-size: var(--fs-body);
 }
 
 .stage {
@@ -819,7 +846,7 @@ button:disabled {
 }
 .stage-launch-label {
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--fs-sm);
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -829,7 +856,7 @@ button:disabled {
   border-radius: 999px;
   background: var(--surface-2);
   color: var(--text);
-  font-size: 15px;
+  font-size: var(--fs-md);
 }
 .chip:active {
   background: #22252b;
@@ -853,7 +880,7 @@ button:disabled {
 }
 .guide-views-label {
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--fs-sm);
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -887,7 +914,7 @@ button:disabled {
 }
 .guide-ov-title {
   font-family: var(--font-display);
-  font-size: 14px;
+  font-size: var(--fs-body);
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -902,19 +929,19 @@ button:disabled {
   border-radius: 7px;
   background: rgba(255, 255, 255, 0.08);
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--fs-sm);
 }
 .guide-ov-note {
   margin: 0;
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--fs-sm);
 }
 .guide-ov-meta {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
-  font-size: 13px;
+  font-size: var(--fs-sm);
   font-variant-numeric: tabular-nums;
 }
 .guide-ov-time {
@@ -942,7 +969,7 @@ button:disabled {
   background: rgba(10, 10, 11, 0.82);
   backdrop-filter: blur(6px);
   color: var(--text);
-  font-size: 14px;
+  font-size: var(--fs-body);
 }
 .guide-add-menu {
   list-style: none;
@@ -966,26 +993,26 @@ button:disabled {
   border-radius: 8px;
   background: transparent;
   color: var(--text);
-  font-size: 15px;
+  font-size: var(--fs-md);
 }
 .guide-add-menu button:active {
   background: rgba(255, 255, 255, 0.08);
 }
 
 /* ---------------------------------------------------------- rides ---- */
-/* Full-width secondary action on the home screen (keeps the four quick-action tiles aligned with the stats row above). */
+/* Full-width home action, directly below Start ride and the same height (--cta-h), so the two primary actions read as a matched pair. */
 .cta-wide {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 12px;
   width: 100%;
-  min-height: 60px;
-  margin: 2px 0 8px;
+  min-height: var(--cta-h);
+  margin: 0 0 var(--gap);
   padding: 0 20px;
   border-radius: 14px;
   font-family: var(--font-display);
-  font-size: 18px;
+  font-size: var(--fs-cta);
   background: var(--surface-2);
   border: 1px solid var(--line-strong);
   color: var(--text);
@@ -1072,6 +1099,48 @@ button:disabled {
 }
 .apps-row input[type='checkbox']:disabled {
   cursor: default;
+}
+.add-app-toggle {
+  margin-top: 10px;
+  align-self: flex-start;
+}
+.apps-list.picker {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.picker-app {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text);
+  font-size: 16px;
+  min-width: 0;
+}
+.picker-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  object-fit: cover;
+  flex: none;
+}
+.picker-mark {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-2, rgba(255, 255, 255, 0.08));
+  color: var(--muted);
+  font-size: var(--fs-label);
+  font-weight: 600;
+}
+.picker-app > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ------------------------------------------------- workout player ---- */
@@ -1227,10 +1296,10 @@ button:disabled {
   font-variant-numeric: tabular-nums;
 }
 .wk-gauge.compact .wk-gauge-now {
-  font-size: 26px;
+  font-size: var(--fs-title);
 }
 .wk-gauge-unit {
-  font-size: 15px;
+  font-size: var(--fs-md);
   color: var(--muted);
 }
 .wk-gauge.compact .wk-gauge-unit {
@@ -1241,7 +1310,7 @@ button:disabled {
   right: 6px;
   padding: 0 5px;
   transform: translateY(-50%);
-  font-size: 11px;
+  font-size: var(--fs-label);
   color: var(--muted);
   background: color-mix(in srgb, var(--surface-2) 85%, transparent);
   border-radius: 4px;
@@ -1318,7 +1387,7 @@ button:disabled {
 }
 .wk-ftp-hint {
   text-align: center;
-  font-size: 14px;
+  font-size: var(--fs-body);
 }
 
 .stage-note {
@@ -1350,6 +1419,14 @@ button:disabled {
   margin-bottom: 14px;
 }
 
+/* The in-HUD browser's heading (Trending, or "Results for …"), sitting opposite the search box. */
+.browser-label {
+  font-family: var(--font-display);
+  font-size: 16px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
 .tabs {
   display: flex;
   gap: 4px;
@@ -1365,7 +1442,7 @@ button:disabled {
   color: var(--muted);
   border-radius: 999px;
   padding: 9px 20px;
-  font-size: 14px;
+  font-size: var(--fs-body);
 }
 .tab:hover {
   background: rgba(255, 255, 255, 0.05);
@@ -1389,7 +1466,7 @@ button:disabled {
 .search input {
   flex: 1;
   font: inherit;
-  font-size: 15px;
+  font-size: var(--fs-md);
   padding: 11px 15px;
   border-radius: 999px;
   border: 1px solid var(--line-strong);
@@ -1467,7 +1544,7 @@ button:disabled {
 }
 
 .vtitle {
-  font-size: 14px;
+  font-size: var(--fs-body);
   font-weight: 600;
   line-height: 1.3;
   display: -webkit-box;
@@ -1505,7 +1582,7 @@ button:disabled {
 }
 .settings-heading {
   display: block;
-  font-size: 13px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--muted);
   margin-bottom: 8px;
@@ -1523,30 +1600,80 @@ button:disabled {
   margin-top: 10px;
 }
 .settings-note {
-  font-size: 13px;
+  font-size: var(--fs-sm);
   line-height: 1.5;
   color: var(--muted);
   margin: 10px 0 0;
   max-width: 680px;
 }
+/* Rider profiles (Settings → Profile). */
+.profile-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+}
+.profile-chip {
+  padding: 8px 18px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: var(--fs-md);
+  cursor: pointer;
+}
+.profile-chip.active {
+  border-color: var(--accent, #4da3ff);
+  background: color-mix(in srgb, var(--accent, #4da3ff) 22%, var(--surface-2));
+  font-weight: 600;
+}
+.profile-chip.add {
+  border-style: dashed;
+  color: var(--muted);
+}
+.profile-chip:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.profile-edit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+.profile-edit input {
+  flex: 1 1 160px;
+  min-width: 120px;
+}
+.profile-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.vwarn {
+  color: #ffb454;
+}
+
 .subs-row {
   display: flex;
   align-items: center;
   gap: 14px;
-  font-size: 14px;
+  font-size: var(--fs-body);
 }
 .subs-manage {
   margin-top: 10px;
 }
 .subs-manage p {
-  font-size: 13px;
+  font-size: var(--fs-sm);
   line-height: 1.5;
   margin: 0 0 10px;
 }
 .subs-manage textarea {
   width: 100%;
   font: inherit;
-  font-size: 14px;
+  font-size: var(--fs-body);
   padding: 12px 14px;
   border-radius: var(--r);
   border: 1px solid var(--line-strong);
@@ -1568,7 +1695,7 @@ button:disabled {
   border-radius: var(--r);
   border: 1px solid var(--line-strong);
   background: var(--surface-2);
-  font-size: 14px;
+  font-size: var(--fs-body);
   font-weight: 600;
   cursor: pointer;
 }
@@ -1588,7 +1715,7 @@ button:disabled {
   flex: 1;
   max-width: 420px;
   font: inherit;
-  font-size: 14px;
+  font-size: var(--fs-body);
   padding: 9px 13px;
   border-radius: 999px;
   border: 1px solid var(--line);
@@ -1596,7 +1723,7 @@ button:disabled {
   color: var(--text);
 }
 .paste .verror {
-  font-size: 13px;
+  font-size: var(--fs-sm);
 }
 
 @media (max-width: 760px) {
@@ -1662,14 +1789,14 @@ button:disabled {
 .obar-unit {
   margin-left: 3px;
   color: #9ca0a8;
-  font-size: 13px;
+  font-size: var(--fs-sm);
   font-weight: 500;
 }
 /* The ride's average power, set small and muted right next to the live power number. */
 .obar-avg {
   margin-left: 8px;
   color: #9ca0a8;
-  font-size: 13px;
+  font-size: var(--fs-sm);
   font-weight: 500;
 }
 .obar-controls {
@@ -1683,7 +1810,7 @@ button:disabled {
   border-radius: 10px;
   background: transparent;
   color: #f5f6f7;
-  font-size: 15px;
+  font-size: var(--fs-md);
 }
 .obar-btn:active {
   background: rgba(255, 255, 255, 0.06);

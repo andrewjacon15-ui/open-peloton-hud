@@ -1,6 +1,6 @@
 /**
- * The open-source YouTube catalog: search, trending and a subscription feed, with no Google account and no API key. This is what lets the
- * HUD browse YouTube from inside our own page (so the stats stay on screen) instead of pasting a link every time.
+ * The open-source YouTube catalog: search and trending, with no Google account and no API key. This is what lets the HUD browse YouTube
+ * from inside our own page (so the stats stay on screen for guided rides) instead of pasting a link every time.
  *
  * It talks to public **Piped** and **Invidious** instances — both are open-source YouTube front-ends with keyless JSON APIs. We normalize
  * the two shapes into one `Video` and fail over across a list of instances, because any single public instance is often slow or down.
@@ -52,15 +52,6 @@ export const PROVIDERS: Provider[] = [
 const TIMEOUT_MS = 9000
 const CHANNEL_ID = /(?:channel\/)?(UC[0-9A-Za-z_-]{22})/
 
-// Subscription-feed tuning. We build the feed by fetching each channel's latest uploads and merging — see subscriptionFeed. Only two public
-// instances actually send CORS headers (ducks.party, private.coffee, probed 2026-11-04), and they rate-limit: past a handful of requests in
-// flight they return 429/500, and those error responses carry no `Access-Control-Allow-Origin`, so the browser reports them as CORS failures.
-// So keep the concurrency low and let a 429 back off and retry once (getJson), which is what actually gets the feed through without the spam.
-// A few latest per channel keeps variety; the merged feed is capped so one prolific channel can't crowd out the rest.
-const FEED_CONCURRENCY = 3
-const FEED_PER_CHANNEL = 3
-const FEED_MAX = 120
-
 /** Pull an 11-char video id out of a Piped `/watch?v=ID` url (or a bare id). */
 export function videoIdFromUrl(url: string | undefined): string | null {
   if (!url) return null
@@ -104,7 +95,6 @@ interface PipedStream {
   duration?: number
   views?: number
   uploadedDate?: string | null
-  uploaded?: number // epoch ms, used only to sort the subscription feed by recency
 }
 
 /** One Piped stream item → a `Video`, or null if it isn't a playable video. */
@@ -135,7 +125,6 @@ interface InvidiousVideo {
   videoThumbnails?: { quality?: string; url?: string }[]
   viewCountText?: string
   publishedText?: string
-  published?: number // epoch seconds, used only to sort the subscription feed by recency
 }
 
 /** One Invidious video item → a `Video`, or null if it isn't a playable video. */
@@ -180,8 +169,6 @@ export function pickVideos(kind: Kind, data: unknown): Video[] {
 let preferred: Provider | null = null
 
 const INSTANCE_KEY = 'peloton-hud:yt-instance'
-const FEED_CACHE_KEY = 'peloton-hud:feed-cache'
-const FEED_FRESH_MS = 5 * 60 * 1000
 
 // Restore the last known-good instance so a cold page start talks to a live host first instead of failing over through dead ones.
 try {
@@ -203,55 +190,6 @@ function setPreferred(p: Provider): void {
 function order(): Provider[] {
   if (!preferred) return PROVIDERS
   return [preferred, ...PROVIDERS.filter((p) => p !== preferred)]
-}
-
-interface FeedCache {
-  ids: string
-  videos: Video[]
-  ts: number
-}
-const feedKey = (ids: string[]): string => ids.filter((id) => CHANNEL_ID.test(id)).join(',')
-
-/** The last subscription feed we showed, if it was built from this exact channel set — lets the browser paint instantly, then revalidate. */
-export function cachedFeed(channelIds: string[]): Video[] | null {
-  try {
-    const raw = localStorage.getItem(FEED_CACHE_KEY)
-    if (!raw) return null
-    const c = JSON.parse(raw) as FeedCache
-    return c.ids === feedKey(channelIds) ? c.videos : null
-  } catch {
-    return null
-  }
-}
-function saveFeed(channelIds: string[], videos: Video[]): void {
-  try {
-    localStorage.setItem(FEED_CACHE_KEY, JSON.stringify({ ids: feedKey(channelIds), videos, ts: Date.now() }))
-  } catch {
-    // ignore
-  }
-}
-function feedIsFresh(channelIds: string[]): boolean {
-  try {
-    const raw = localStorage.getItem(FEED_CACHE_KEY)
-    if (!raw) return false
-    const c = JSON.parse(raw) as FeedCache
-    return c.ids === feedKey(channelIds) && Date.now() - c.ts < FEED_FRESH_MS
-  } catch {
-    return false
-  }
-}
-
-let prefetching = false
-/** Warm the subscription feed in the background (called from the home screen) so opening YouTube is instant. No-op if a fetch is already in flight or the cache is still fresh. */
-export function prefetchSubscriptionFeed(channelIds: string[]): void {
-  const ids = channelIds.filter((id) => CHANNEL_ID.test(id))
-  if (!ids.length || prefetching || feedIsFresh(ids)) return
-  prefetching = true
-  subscriptionFeed(ids)
-    .catch(() => {})
-    .finally(() => {
-      prefetching = false
-    })
 }
 
 const sleep = (ms: number, signal?: AbortSignal) =>
@@ -348,83 +286,4 @@ export function searchVideos(query: string, signal?: AbortSignal): Promise<Video
 
 export function trendingVideos(region = 'US', signal?: AbortSignal): Promise<Video[]> {
   return run({ piped: `/trending?region=${region}`, invidious: `/api/v1/trending?region=${region}` }, signal)
-}
-
-/**
- * The subscription feed from a list of channel ids. Piped's one-shot `/feed/unauthenticated` endpoint only surfaces the last day or so,
- * and only for channels that instance happens to have cached, so for a real list it comes back nearly empty (4–17 items for 238 channels).
- * Instead we fetch each channel's latest uploads directly — Piped `/channel/{id}` (`relatedStreams`), Invidious `/api/v1/channels/{id}/videos`
- * — take the newest few from each, and merge them sorted by upload time. A bounded worker pool (FEED_CONCURRENCY) keeps the bike responsive
- * and under the public instances' rate limits; a channel that errors or gets a 429 is simply skipped. Falls back across providers like the
- * others: the first instance that yields any videos wins.
- */
-export async function subscriptionFeed(channelIds: string[], signal?: AbortSignal): Promise<Video[]> {
-  const ids = channelIds.filter((id) => CHANNEL_ID.test(id))
-  if (!ids.length) return []
-  const tried: string[] = []
-  for (const p of order()) {
-    if (signal?.aborted) throw new DOMException('aborted', 'AbortError')
-    try {
-      const videos = await fetchLatestPerChannel(p, ids, signal)
-      if (videos.length) {
-        setPreferred(p)
-        saveFeed(ids, videos)
-        return videos
-      }
-      tried.push(`${hostOf(p.base)}: no results`)
-    } catch (e) {
-      if (signal?.aborted) throw e
-      tried.push(instanceFailure(p.base, e))
-    }
-  }
-  throw noInstanceError(tried)
-}
-
-/** One channel's newest uploads from `provider`, each paired with an epoch-ms timestamp for sorting. Empty on any per-channel failure. */
-async function channelLatest(provider: Provider, id: string, signal?: AbortSignal): Promise<{ ts: number; video: Video }[]> {
-  const out: { ts: number; video: Video }[] = []
-  if (provider.kind === 'piped') {
-    const data = (await getJson(provider, `/channel/${id}`, signal)) as { relatedStreams?: PipedStream[] }
-    for (const it of (data.relatedStreams ?? []).slice(0, FEED_PER_CHANNEL)) {
-      const video = normalizePiped(it)
-      if (video) out.push({ ts: Number(it.uploaded) || 0, video })
-    }
-  } else {
-    const data = (await getJson(provider, `/api/v1/channels/${id}/videos`, signal)) as { videos?: InvidiousVideo[] }
-    const vids = Array.isArray(data) ? (data as InvidiousVideo[]) : (data.videos ?? [])
-    for (const it of vids.slice(0, FEED_PER_CHANNEL)) {
-      const video = normalizeInvidious(it)
-      if (video) out.push({ ts: (Number(it.published) || 0) * 1000, video })
-    }
-  }
-  return out
-}
-
-/** Fetch every channel's latest uploads through a bounded worker pool, then merge newest-first, dedupe, and cap. */
-async function fetchLatestPerChannel(provider: Provider, ids: string[], signal?: AbortSignal): Promise<Video[]> {
-  const collected: { ts: number; video: Video }[] = []
-  let next = 0
-  const worker = async () => {
-    while (next < ids.length) {
-      if (signal?.aborted) throw new DOMException('aborted', 'AbortError')
-      const id = ids[next++]
-      try {
-        collected.push(...(await channelLatest(provider, id, signal)))
-      } catch (e) {
-        if (signal?.aborted) throw e
-        // A single channel being down, rate-limited, or malformed shouldn't sink the whole feed — skip it.
-      }
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(FEED_CONCURRENCY, ids.length) }, worker))
-  collected.sort((a, b) => b.ts - a.ts)
-  const seen = new Set<string>()
-  const videos: Video[] = []
-  for (const { video } of collected) {
-    if (seen.has(video.id)) continue
-    seen.add(video.id)
-    videos.push(video)
-    if (videos.length >= FEED_MAX) break
-  }
-  return videos
 }

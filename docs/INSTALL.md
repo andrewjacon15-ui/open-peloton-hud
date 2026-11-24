@@ -44,22 +44,24 @@ This lets your computer install an app on the tablet. Menu names vary a little b
 When the tablet restarts, it opens straight into the HUD. You can unplug the cable.
 
 **What the installer changes on the tablet** (all reversible; see "Undo" below): lets the HUD draw its stats bar over other apps, see
-which app is in front, and set the screen brightness; turns off Peloton's updaters, its remote-management agent and Android's automatic
-updates; turns off the Peloton membership screens that block Netflix and keep asking you to sign in; enables Netflix; makes the HUD the
-home screen. It keeps "freeform windows" off (turning that on blanks the screen).
+which app is in front, and set the screen brightness; turns on a small accessibility service so the stats bar's **Back** button can step
+back inside full-screen apps like SmartTube that hide the system navigation bar (it watches nothing and reads no screen content); turns off
+Peloton's updaters, its remote-management agent and Android's automatic updates; turns off the Peloton membership screens that block Netflix
+and keep asking you to sign in; enables Netflix; makes the HUD the home screen. It keeps "freeform windows" off (turning that on blanks the screen).
 
 ## Using it
 
 - **Start** a ride from the HUD; it auto-pauses when you stop pedaling. Rides are listed under **History**.
+- **Profiles.** One bike, more than one rider: **Settings → Profile** keeps separate weight, FTP and ride history per person. It only
+  changes your bike stats — not the media apps or their sign-ins, which are shared.
 - **Settings** (the gear at the top of the HUD): your weight and FTP (for calories and power zones), units, which media apps show on the
-  home screen (**Apps**), YouTube subscriptions, and **Device**: open Peloton's own app, Android settings (Wi-Fi), or choose a different
-  home screen.
+  home screen (**Apps**), rider profiles, and **Device**: open Peloton's own app, Android settings (Wi-Fi), or choose a different home screen.
 - **Media apps.** Only Netflix comes on the bike. Everything else you *sideload* — see below. Once an app is installed, turn it on under
   **Settings → Apps** and a launch button appears on the home screen; each opens full screen with the stats bar over it, and you sign into
-  each one once.
-- **YouTube.** The HUD has a built-in YouTube player (the YouTube button, also what guided rides ride over). The bike has no Google Play
-  Services, so the official YouTube app can't sign in — if you want a native YouTube, sideload **SmartTube** (a free, Google-services-free
-  YouTube) instead.
+  each one once. The stats bar's **Back** (‹) and **Home** buttons navigate even when the app itself hides the system nav bar.
+- **YouTube.** The **YouTube** button launches **SmartTube** (a free, Google-services-free native YouTube client) when it's installed —
+  the bike has no Google Play Services, so the official YouTube app can't sign in. Sideload SmartTube to use it. Without it, the YouTube
+  button falls back to a built-in web player (also what guided rides draw the power gauge over).
 
 ## Adding more apps (sideloading)
 
@@ -98,6 +100,8 @@ Download the newer zip from Releases and run the installer again. Your rides and
 - **Remove the HUD:** Android settings → Apps → Peloton HUD → Uninstall. This erases its saved rides.
 - **Turn Peloton's apps back on:** with the tablet plugged in, run `adb shell pm enable <package>` for each package the installer listed as
   "disabled" (e.g. `com.onepeloton.systempluginui`). Turning the updaters back on lets Peloton update the bike again.
+- **Turn off the HUD's Back-button accessibility service:** `adb shell settings put secure enabled_accessibility_services ""` (the stats
+  bar's Back button then just returns to the HUD instead of stepping back inside an app).
 
 ## Troubleshooting
 
@@ -111,6 +115,7 @@ Download the newer zip from Releases and run the installer again. Your rides and
 | Kindle's bottom line (or an app's bottom edge) is cut off | A hardware limit: the bike's system navigation bar sits ~72px up the screen, and this Peloton build offers no way to hide or shrink it without rooting (which this project doesn't do). The top of the HUD's stats bar can be tucked away with its chevron, but the bottom bar is the system's. |
 | Video looks soft / standard-definition | Expected on some apps. The bike isn't Google-certified for high-definition DRM, so those apps fall back to SD. Netflix and Kindle are unaffected. |
 | A sideloaded app won't open or sign in | It probably needs Google Play Services, which the bike doesn't have. Google's own apps (official YouTube, YouTube TV) won't work — use SmartTube or the built-in YouTube player. Most other streaming apps (they ship on Amazon Fire / smart TVs too) are fine. |
+| Can't go back inside SmartTube (or another app with no on-screen Back) | Use the **‹ Back** button on the HUD's stats bar at the top. If it only returns to the HUD instead of stepping back in the app, the Back accessibility service isn't enabled — run the installer again, or `adb shell settings put secure enabled_accessibility_services app.pelotonhud/app.pelotonhud.BackAccessibilityService` then `adb shell settings put secure accessibility_enabled 1`. |
 
 ## Which bikes work
 

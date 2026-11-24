@@ -11,11 +11,14 @@ read and write is guarded, so a locked-down WebView never crashes the HUD.
 
 | Key | Shape | Written by |
 |---|---|---|
-| `peloton-hud:settings` | `{ weightKg, ftpWatts?, units?: "imperial" \| "metric", weightUnit?: "lb" \| "kg" }` | `src/ride/storage.ts` |
-| `peloton-hud:rides` | `StoredRide[]`, newest first, at most 50 | `src/ride/storage.ts` |
-| `peloton-hud:subscriptions` | YouTube channels `{ id, name }[]` | `src/media/subscriptions.ts` |
-| `peloton-hud:youtube-recents` | recently watched videos | `src/media/useMedia.ts` |
-| `peloton-hud:yt-instance`, `peloton-hud:feed-cache` | last working YouTube instance, cached feeds | `src/media/youtubeApi.ts` |
+| `peloton-hud:profiles` | rider profiles `{ id, name }[]` (bike stats + history only; not media sign-ins) | `src/ride/profiles.ts` |
+| `peloton-hud:active-profile` | id of the active profile | `src/ride/profiles.ts` |
+| `peloton-hud:settings:<id>` | per-profile `{ weightKg, ftpWatts?, units?: "imperial" \| "metric", weightUnit?: "lb" \| "kg" }` | `src/ride/storage.ts` |
+| `peloton-hud:rides:<id>` | per-profile `StoredRide[]`, newest first, at most 50 | `src/ride/storage.ts` |
+| `peloton-hud:youtube-recents` | recently watched videos (in-HUD player) | `src/media/useMedia.ts` |
+| `peloton-hud:yt-instance` | last working open-source YouTube instance | `src/media/youtubeApi.ts` |
+
+On first run the old single-rider keys `peloton-hud:settings` / `peloton-hud:rides` are copied into the `default` profile (`…:settings:default` / `…:rides:default`) so existing data carries over. Subscriptions, recents and enabled apps are device-level and shared across profiles.
 
 A `StoredRide` is a `RideSummary` (`src/ride/recorder.ts`) plus a small downsampled `series` for the detail chart (`src/ride/series.ts`):
 
@@ -38,6 +41,7 @@ messages so the web app can be built and tested on a laptop.
 | `hello` | `shellVersion`, `device` (tablet model), `sensor: "affernet" \| "sensordata" \| "ble" \| "simulated" \| "none"`, `android?` (release, e.g. "11"), `abi?` (e.g. "arm64-v8a") | once, on connect (and again after the source changes) |
 | `sensors` | `current` (`"internal"` or a Bluetooth address), `currentName`, `scanning`, `devices: { id, name, kind: "power" \| "cadence" }[]`, `error?` | on connect, during a Bluetooth scan as devices appear, and after the source changes |
 | `apps` | `installed: string[]` — which of the queried media-app packages are installed and launchable here | in reply to `queryApps` |
+| `installedApps` | `apps: { pkg, label, icon? }[]` — every launchable app on the device (minus the HUD and Peloton's own launcher), each with its label and real launcher icon as a PNG data URL; powers Settings → Apps "Add an app" | in reply to `queryInstalledApps` |
 | `sample` | `t` (ms since epoch), `power`, `cadence`, `resistance`, `hr?` | about once a second while the bike reports |
 | `ride` | `rideId`, `state: "idle" \| "active" \| "paused" \| "done"`, `startedAt?` | when the ride state changes |
 | `error` | `code`, `message` | sensor lost, permission refused |
@@ -50,9 +54,12 @@ messages so the web app can be built and tested on a laptop.
 Web → shell: `startRide`, `pauseRide`, `resumeRide`, `endRide`, `openApp` (`{ pkg }` plus optionally `{ elapsedSec, outputKj, weightKg,
 plan }` to seed the overlay — TIME/OUTPUT from an in-progress ride, the rider weight the overlay needs for CALORIES, and `plan`, a power plan
 flattened to `{ durationSec, targetW }[]` (src/rides/rides.ts `resolvePlan`) so the overlay draws the guide gauge and advances its target off
-elapsedSec while the WebView is frozen; omitted → no gauge — the shell launches the package full screen with the native overlay over it, and
+elapsedSec while the WebView is frozen; omitted → no gauge; plus optional `hidesNav` — true for an app that renders the system nav bar
+translucent so it reads as a black strip with no buttons (SmartTube), which makes the shell draw its own opaque Back/Home pill at the bottom over
+it — the shell launches the package full screen with the native overlay over it, and
 knows each package's launch quirks e.g. Netflix's membership-gated wrapper), `queryApps` (`{ pkgs: string[] }` — which media apps are installed;
-answered with an `apps` message; the catalog is src/media/apps.ts), `closeOverlay`,
+answered with an `apps` message; the catalog is src/media/apps.ts), `queryInstalledApps` (no args — every launchable app on the device, answered
+with an `installedApps` message; lets Settings → Apps add any sideloaded app as a tile, stored in src/media/customApps.ts), `closeOverlay`,
 `setVolume` (`{ level: 0–1 }`), `setBrightness` (`{ level: 0–1 }`) — the shell clamps, applies, then echoes a `levels` message (`{ type, ...args }`),
 and the way out from Settings: `openPeloton` (Peloton's own home screen; the kiosk guard stands down until the HUD is back in front),
 `openAndroidSettings`, `chooseHomeApp` (Android's default-home picker). The shell offers the same three on its native recovery screen, which

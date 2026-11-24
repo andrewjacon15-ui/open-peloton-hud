@@ -54,6 +54,9 @@ class MainActivity : Activity() {
         NetflixOverlay(
             this,
             onHome = { exitOverlay("home") },
+            // System-wide Back for the app in front (navigates inside SmartTube etc.). If the accessibility service isn't enabled, fall back
+            // to leaving the app for the HUD, so the button is never dead.
+            onBack = { if (!BackAccessibilityService.back()) exitOverlay("home") },
             onToggleRide = { toggleRideFromOverlay() },
             onSetVolume = { setVolume(it) },
             onSetBrightness = { setBrightness(it) },
@@ -134,11 +137,13 @@ class MainActivity : Activity() {
                 addView(recovery, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
             },
         )
-        goImmersive() // After setContentView: the decor view (and its insets controller) does not exist before the window has content.
-        // Shrink the WebView by the on-screen keypad's height when it shows, so a focused settings field is never hidden behind it
-        // (the HUD is full screen, so nothing insets for the IME on its own). The web side then scrolls the field into view.
+        applySystemBars() // After setContentView: the decor view (and its insets controller) does not exist before the window has content.
+        // Keep the HUD clear of the system navigation bar (kept visible on purpose — see applySystemBars) and of the on-screen keypad: pad the
+        // WebView's bottom by whichever is taller. The web side then scrolls a focused settings field into view above the keypad.
         web.setOnApplyWindowInsetsListener { v, insets ->
-            v.setPadding(0, 0, 0, insets.getInsets(WindowInsets.Type.ime()).bottom)
+            val ime = insets.getInsets(WindowInsets.Type.ime()).bottom
+            val nav = insets.getInsets(WindowInsets.Type.navigationBars()).bottom
+            v.setPadding(0, 0, 0, maxOf(ime, nav))
             insets
         }
         // Kiosk guard: keep the bike on our software even if a Peloton app foregrounds itself (docs/SOFTWARE-PLAN.md step 9).
@@ -328,8 +333,9 @@ class MainActivity : Activity() {
                 val o = runCatching { JSONObject(data) }.getOrNull()
                 when (type) {
                     "openApp" -> o?.optString("pkg")?.takeIf { it.isNotEmpty() }
-                        ?.let { openApp(it, o.optInt("elapsedSec", 0), o.optDouble("outputKj", 0.0), o.optDouble("weightKg", 0.0), parsePlan(o)) }
+                        ?.let { openApp(it, o.optInt("elapsedSec", 0), o.optDouble("outputKj", 0.0), o.optDouble("weightKg", 0.0), parsePlan(o), o.optBoolean("hidesNav", false)) }
                     "queryApps" -> queryApps(o)
+                    "queryInstalledApps" -> queryInstalledApps()
                     "closeOverlay" -> exitOverlay("home")
                     "setVolume" -> o?.let { setVolume(it.optDouble("level", Double.NaN)) }
                     "setBrightness" -> o?.let { setBrightness(it.optDouble("level", Double.NaN)) }
@@ -493,7 +499,7 @@ class MainActivity : Activity() {
      * straight to Netflix's own launch activity, falling back to the package launcher only if that activity is gone. Apps other than Netflix
      * (the only one preinstalled) must be sideloaded first.
      */
-    private fun openApp(pkg: String, seedElapsedSec: Int, seedOutputKj: Double, seedWeightKg: Double, plan: List<NetflixOverlay.PlanSeg>) {
+    private fun openApp(pkg: String, seedElapsedSec: Int, seedOutputKj: Double, seedWeightKg: Double, plan: List<NetflixOverlay.PlanSeg>, hidesNav: Boolean) {
         if (!Settings.canDrawOverlays(this)) {
             post(Messages.error("overlay", "Allow drawing over other apps first (npm run bike -- setup)"))
             return
@@ -505,7 +511,7 @@ class MainActivity : Activity() {
             post(Messages.error("app", "Could not open that app — install it (sideload) and enable it in Settings, then try again."))
             return
         }
-        showOverlay(seedElapsedSec, seedOutputKj, seedWeightKg, plan)
+        showOverlay(seedElapsedSec, seedOutputKj, seedWeightKg, plan, hidesNav)
     }
 
     /** Answer the web's queryApps: of the packages it asked about, report those that are installed and launchable on this build. */
@@ -515,7 +521,43 @@ class MainActivity : Activity() {
         post(Messages.apps(PelotonApps.installed(candidates) { packageManager.getLaunchIntentForPackage(it) != null }))
     }
 
-    /** Parse the optional power plan handed with openNetflix/openKindle — a JSON array of {durationSec, targetW} — so the overlay can draw the
+    /**
+     * Answer the web's queryInstalledApps (Settings → Apps "Add an app"): every launchable app on the device, each with its real launcher icon,
+     * so the user can add ANY sideloaded app as a home tile — the HUD isn't limited to the built-in catalog. We skip our own app and Peloton's
+     * own launcher/system home (we don't want the kiosk launcher as a tile); the web filters out apps already in the catalog or already added.
+     * Enumeration + icon rasterization runs off the main thread (dozens of icons) and posts the result back on the main looper.
+     */
+    private fun queryInstalledApps() {
+        Thread {
+            val pm = packageManager
+            val main = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+            val self = packageName
+            val seen = HashSet<String>()
+            val apps = ArrayList<Messages.InstalledApp>()
+            for (ri in runCatching { pm.queryIntentActivities(main, 0) }.getOrDefault(emptyList())) {
+                val pkg = ri.activityInfo?.packageName ?: continue
+                if (pkg == self || FocusPolicy.isPeloton(pkg) || !seen.add(pkg)) continue
+                val label = runCatching { ri.loadLabel(pm).toString() }.getOrNull()?.takeIf { it.isNotBlank() } ?: pkg
+                val icon = runCatching { encodeIcon(ri.loadIcon(pm)) }.getOrNull()
+                apps.add(Messages.InstalledApp(pkg, label, icon))
+            }
+            apps.sortBy { it.label.lowercase() }
+            mainHandler.post { post(Messages.installedApps(apps)) }
+        }.start()
+    }
+
+    /** Rasterize an app's launcher icon (adaptive or legacy) to a square PNG data URL, so the web can show it on the tile with no bundled asset. */
+    private fun encodeIcon(d: android.graphics.drawable.Drawable, size: Int = 96): String {
+        val bmp = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
+        d.setBounds(0, 0, size, size)
+        d.draw(android.graphics.Canvas(bmp))
+        val out = java.io.ByteArrayOutputStream()
+        bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
+        bmp.recycle()
+        return "data:image/png;base64," + android.util.Base64.encodeToString(out.toByteArray(), android.util.Base64.NO_WRAP)
+    }
+
+    /** Parse the optional power plan handed with openApp — a JSON array of {durationSec, targetW} — so the overlay can draw the
      *  guide gauge and advance its target while the WebView is frozen. Absent/unreadable → no plan (no gauge). */
     private fun parsePlan(o: JSONObject?): List<NetflixOverlay.PlanSeg> {
         val arr = o?.optJSONArray("plan") ?: return emptyList()
@@ -529,8 +571,8 @@ class MainActivity : Activity() {
 
     /** Draw the shared stats overlay over whichever app was just launched, seeded with the ride so TIME/OUTPUT/CAL continue it, and (if a ride
      *  is recording) start buffering so it keeps recording while the WebView is frozen behind that app. */
-    private fun showOverlay(seedElapsedSec: Int, seedOutputKj: Double, seedWeightKg: Double, plan: List<NetflixOverlay.PlanSeg>) {
-        overlay.show(seedElapsedSec, seedOutputKj, seedWeightKg, recording, plan)
+    private fun showOverlay(seedElapsedSec: Int, seedOutputKj: Double, seedWeightKg: Double, plan: List<NetflixOverlay.PlanSeg>, hidesNav: Boolean = false) {
+        overlay.show(seedElapsedSec, seedOutputKj, seedWeightKg, recording, plan, hidesNav)
         overlay.update(lastSample.power, lastSample.cadence, lastSample.resistance)
         overlay.setLevels(volumeLevel(), brightnessLevel())
         rideBuffer.clear() // fresh behind-app session; the buffer accumulates across pause/resume until the overlay is dismissed.
@@ -617,14 +659,25 @@ class MainActivity : Activity() {
         // The HUD is back in front (e.g. Home after "Open Peloton app"): the kiosk guard resumes keeping Peloton's apps away.
         GuardService.standDown = false
         // Returning to the HUD any other way (home, recents) also dismisses the overlay and lands on the HUD.
-        if (overlay.isShowing) exitOverlay("home")
+        if (overlay.isShowing) {
+            exitOverlay("home")
+        } else if (NetflixOverlay.dismissStale(this)) {
+            // An overlay window from a prior activity instance was still attached over the HUD (orphaned) — remove it and make sure the
+            // web has left the media view, so the HUD home never shows the media stats bar on top of its own stats.
+            post(Messages.overlayClosed("home"))
+        }
         // Volume/brightness may have changed (hardware keys) while we were away — refresh the HUD's sliders.
         post(levelsMessage())
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
-        if (hasFocus) goImmersive()
+        if (hasFocus) {
+            applySystemBars()
+            // Belt-and-suspenders for the orphaned-overlay case: if the HUD has focus, we're on the HUD, so no media overlay should be
+            // attached. Remove any that a prior (destroyed) activity instance left behind, which onResume's own check can miss.
+            if (!overlay.isShowing && NetflixOverlay.dismissStale(this)) post(Messages.overlayClosed("home"))
+        }
     }
 
     // The HUD is the bike's launcher, so BACK must never drop out to Peloton: close the Netflix overlay, else step back through the web
@@ -639,11 +692,17 @@ class MainActivity : Activity() {
         }
     }
 
-    /** Hide the status and nav bars so there is no system chrome to tap out of; they reappear only on a transient swipe. */
-    private fun goImmersive() {
+    /**
+     * Keep the system navigation bar (Back / Home / Recents) visible across the HUD. The bike's launcher can't remove it without root, and
+     * riders rely on it to navigate sideloaded apps like SmartTube that offer no on-screen Back of their own — so we show it everywhere
+     * rather than hide it. The status bar stays hidden (the HUD has its own top bar). Edge-to-edge layout with the nav bar's inset padded
+     * out in the WebView's insets listener, so HUD content never sits under the bar.
+     */
+    private fun applySystemBars() {
         window.setDecorFitsSystemWindows(false)
         window.insetsController?.let {
-            it.hide(WindowInsets.Type.systemBars())
+            it.show(WindowInsets.Type.navigationBars())
+            it.hide(WindowInsets.Type.statusBars())
             it.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
     }

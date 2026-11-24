@@ -1,12 +1,13 @@
-import { useState, type FocusEvent } from 'react'
+import { useEffect, useReducer, useState, type FocusEvent } from 'react'
 import { getBridge } from '../bridge'
 import type { useRide } from '../ride/useRide'
 import { useSensors } from './useSensors'
-import { useInstalledApps, useDeviceInfo } from '../media/useApps'
+import { useInstalledApps, useDeviceInfo, useAllInstalledApps, type InstalledApp } from '../media/useApps'
 import { MEDIA_APPS, loadDisabledApps, setAppEnabled } from '../media/apps'
-import { SubscriptionsSettings } from '../media/SubscriptionsSettings'
+import { useCustomApps, addCustomApp, removeCustomApp, markForName } from '../media/customApps'
 import { ScreenHeader } from './ScreenHeader'
 import { kgFromLb, lbFromKg } from './stats'
+import { activeProfileId, addProfile, deleteProfile, loadProfiles, renameProfile, setActiveProfile, subscribeProfiles } from '../ride/profiles'
 
 // Keep a focused field above the on-screen keypad: the HUD runs full screen, so the IME would otherwise cover it. The delay lets the
 // keyboard finish animating in (and the shell finish shrinking the WebView) before we scroll.
@@ -16,8 +17,9 @@ const keepInView = (e: FocusEvent<HTMLInputElement>) => {
 }
 
 /**
- * The settings screen — weight, FTP, units and YouTube subscriptions — reached from the gear button in the home header, with a Back that
- * returns to the HUD. Its own screen (not an inline panel) so the home dashboard stays about the ride. Shares the `.settings` styles.
+ * The settings screen — rider profiles, weight, FTP, units, which apps show on the home screen, the sensor source, and the way out of the
+ * HUD — reached from the gear button in the home header, with a Back that returns to the HUD. Its own screen (not an inline panel) so the
+ * home dashboard stays about the ride. Shares the `.settings` styles.
  */
 export function SettingsView({ ride, onBack }: { ride: ReturnType<typeof useRide>; onBack: () => void }) {
   const s = ride.settings
@@ -29,6 +31,7 @@ export function SettingsView({ ride, onBack }: { ride: ReturnType<typeof useRide
       <ScreenHeader title="Settings" onBack={onBack} />
 
       <div className="settings-body">
+        <ProfilesSettings recording={ride.state === 'active' || ride.state === 'paused'} />
         <label>
           Weight
           <div className="weight-row">
@@ -60,15 +63,144 @@ export function SettingsView({ ride, onBack }: { ride: ReturnType<typeof useRide
           </select>
         </label>
         <AppsSettings />
-        <div className="settings-section">
-          <span className="settings-heading">YouTube subscriptions</span>
-          <p className="settings-note">For the in-HUD YouTube player (what the YouTube button opens here, and what guided rides ride over).</p>
-          <SubscriptionsSettings />
-        </div>
         <SensorSettings recording={ride.state === 'active' || ride.state === 'paused'} />
         <DeviceSettings recording={ride.state === 'active' || ride.state === 'paused'} />
       </div>
     </main>
+  )
+}
+
+/**
+ * Rider profiles: keep separate bike stats (weight, FTP) and separate ride history on one bike. A profile is just a name; the rest of this
+ * screen (weight, FTP, units) and the saved rides belong to whichever profile is active. Switching is blocked mid-ride (it would swap the
+ * numbers out from under a running recorder). Media apps and their sign-ins are not affected — those live in the apps' own accounts.
+ */
+function ProfilesSettings({ recording }: { recording: boolean }) {
+  // Derive profiles + active id straight from storage on every render, and re-render whenever they change (here or from useRide). Keeping no
+  // separate copy avoids the state drifting out of sync with the real active profile — a drift that could point Delete at the wrong one.
+  const [, bump] = useReducer((n: number) => n + 1, 0)
+  useEffect(() => subscribeProfiles(bump), [])
+  const profiles = loadProfiles()
+  const active = activeProfileId()
+  const activeProfile = profiles.find((p) => p.id === active)
+
+  const [adding, setAdding] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [renaming, setRenaming] = useState(false)
+  const [editName, setEditName] = useState('')
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null)
+  const confirmDelete = pendingDelete !== null && pendingDelete === active
+
+  const switchTo = (id: string) => {
+    if (recording || id === active) return
+    setActiveProfile(id) // notifies: this component and useRide both reload the now-active profile
+  }
+  const add = () => {
+    const name = newName.trim()
+    if (!name) return
+    addProfile(name) // becomes active (starts with its own empty stats + history)
+    setNewName('')
+    setAdding(false)
+  }
+
+  return (
+    <div className="settings-section">
+      <span className="settings-heading">Profile</span>
+      <p className="settings-note">Keep separate weight, FTP and ride history per rider. Switching changes only your bike stats — not the apps or their sign-ins.</p>
+      <div className="profile-row">
+        {profiles.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            className={p.id === active ? 'profile-chip active' : 'profile-chip'}
+            disabled={recording && p.id !== active}
+            aria-pressed={p.id === active}
+            onClick={() => switchTo(p.id)}
+          >
+            {p.name}
+          </button>
+        ))}
+        {!adding && (
+          <button type="button" className="profile-chip add" disabled={recording} onClick={() => setAdding(true)}>
+            + New rider
+          </button>
+        )}
+      </div>
+      {adding && (
+        <div className="profile-edit">
+          <input
+            type="text"
+            value={newName}
+            placeholder="Name"
+            autoFocus
+            maxLength={24}
+            onFocus={keepInView}
+            onChange={(e) => setNewName(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && add()}
+          />
+          <button type="button" className="ghost" onClick={add}>
+            Add
+          </button>
+          <button type="button" className="link" onClick={() => { setAdding(false); setNewName('') }}>
+            Cancel
+          </button>
+        </div>
+      )}
+      {renaming && activeProfile ? (
+        <div className="profile-edit">
+          <input
+            type="text"
+            value={editName}
+            placeholder="Name"
+            autoFocus
+            maxLength={24}
+            onFocus={keepInView}
+            onChange={(e) => setEditName(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && (renameProfile(active, editName), setRenaming(false))}
+          />
+          <button type="button" className="ghost" onClick={() => { renameProfile(active, editName); setRenaming(false) }}>
+            Save
+          </button>
+          <button type="button" className="link" onClick={() => setRenaming(false)}>
+            Cancel
+          </button>
+        </div>
+      ) : (
+        !adding &&
+        activeProfile && (
+          <>
+            <div className="settings-actions">
+              <button type="button" className="link" onClick={() => { setEditName(activeProfile.name); setRenaming(true) }}>
+                Rename “{activeProfile.name}”
+              </button>
+              {profiles.length > 1 && !confirmDelete && (
+                <button type="button" className="link" disabled={recording} onClick={() => setPendingDelete(active)}>
+                  Delete
+                </button>
+              )}
+            </div>
+            {confirmDelete && (
+              <p className="settings-note vwarn profile-confirm">
+                Delete “{activeProfile.name}” and its saved rides? This can’t be undone.
+                <button
+                  type="button"
+                  className="link"
+                  onClick={() => {
+                    if (pendingDelete) deleteProfile(pendingDelete) // the exact profile shown; switches away + useRide reloads
+                    setPendingDelete(null)
+                  }}
+                >
+                  Delete
+                </button>
+                <button type="button" className="link" onClick={() => setPendingDelete(null)}>
+                  Cancel
+                </button>
+              </p>
+            )}
+          </>
+        )
+      )}
+    </div>
   )
 }
 
@@ -82,13 +214,17 @@ function AppsSettings() {
   const device = useDeviceInfo()
   const [disabled, setDisabled] = useState(loadDisabledApps)
   const toggle = (id: string, enabled: boolean) => setDisabled(new Set(setAppEnabled(id, enabled)))
+  const custom = useCustomApps()
+  const [adding, setAdding] = useState(false)
+  // Packages already on the home screen (catalog + added), so the picker only offers apps that aren't there yet.
+  const onScreen = new Set<string>([...MEDIA_APPS.map((a) => a.pkg), ...custom.map((a) => a.pkg)])
   return (
     <div className="settings-section">
       <span className="settings-heading">Apps</span>
       <p className="settings-note">
         {installed === null
           ? 'Checking which apps are installed…'
-          : 'The media apps that get a button on the home screen. Sideload an app and it appears here to turn on. Only Netflix comes on the bike.'}
+          : 'The media apps that get a button on the home screen. Sideload an app and it appears here to turn on. Only Netflix comes on the bike — add any other app below.'}
       </p>
       {device && (device.abi || device.android) && (
         <p className="settings-note dim">
@@ -113,8 +249,64 @@ function AppsSettings() {
             </li>
           )
         })}
+        {/* Apps the rider added themselves — any sideloaded APK, not just the catalog. Removing takes the tile off the home screen (the app
+            stays installed). */}
+        {custom.map((a) => (
+          <li key={a.pkg} className="apps-row">
+            <label>
+              <input type="checkbox" checked readOnly />
+              <span>{a.name}</span>
+            </label>
+            <button type="button" className="link" onClick={() => removeCustomApp(a.pkg)}>
+              Remove
+            </button>
+          </li>
+        ))}
       </ul>
+      <button type="button" className="link add-app-toggle" onClick={() => setAdding((v) => !v)} aria-expanded={adding}>
+        {adding ? 'Done' : '+ Add an app'}
+      </button>
+      {adding && <AppPicker onScreen={onScreen} onAdd={(a) => addCustomApp({ pkg: a.pkg, name: a.label, icon: a.icon })} />}
     </div>
+  )
+}
+
+/**
+ * The "Add an app" picker: every launchable app on the device (from the shell) that isn't already on the home screen, so a rider can put any
+ * sideloaded app on the HUD — the launcher isn't limited to the built-in catalog. Each row shows the app's real icon (or a derived mark) and
+ * its name. Mounted only while open, so the heavier queryInstalledApps (which rasterizes every icon) runs only when the rider asks to add one.
+ */
+function AppPicker({ onScreen, onAdd }: { onScreen: Set<string>; onAdd: (a: InstalledApp) => void }) {
+  const all = useAllInstalledApps()
+  const [added, setAdded] = useState<Set<string>>(new Set())
+  if (all === null) return <p className="settings-note dim">Reading installed apps…</p>
+  const candidates = all.filter((a) => !onScreen.has(a.pkg))
+  if (!candidates.length) return <p className="settings-note dim">Every installed app is already on the home screen.</p>
+  return (
+    <ul className="apps-list picker">
+      {candidates.map((a) => (
+        <li key={a.pkg} className="apps-row">
+          <span className="picker-app">
+            {a.icon ? <img className="picker-icon" src={a.icon} alt="" aria-hidden="true" /> : <span className="picker-mark">{markForName(a.label)}</span>}
+            <span>{a.label}</span>
+          </span>
+          {added.has(a.pkg) ? (
+            <span className="dim">Added</span>
+          ) : (
+            <button
+              type="button"
+              className="link"
+              onClick={() => {
+                onAdd(a)
+                setAdded((s) => new Set(s).add(a.pkg))
+              }}
+            >
+              Add
+            </button>
+          )}
+        </li>
+      ))}
+    </ul>
   )
 }
 

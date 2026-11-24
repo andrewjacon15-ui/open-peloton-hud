@@ -38,6 +38,9 @@ export type ShellMessage =
   // Which of the media-app packages the web asked about (queryApps) are installed and launchable on this device. The home screen shows a
   // launch button only for apps that are installed and enabled (src/media/apps.ts). Sent in reply to queryApps.
   | { type: 'apps'; installed: string[] }
+  // Every launchable app on the device (minus the HUD itself and Peloton's own launcher), each with its label and real launcher icon as a PNG
+  // data URL. Answers queryInstalledApps; powers Settings → Apps "Add an app", which lets a rider put any sideloaded app on the home screen.
+  | { type: 'installedApps'; apps: { pkg: string; label: string; icon?: string }[] }
 
 export type WebCommand =
   | { type: 'startRide' }
@@ -50,9 +53,14 @@ export type WebCommand =
   // overlay's default weight. plan is a power plan flattened to segment durations + watt targets (src/rides/rides.ts resolvePlan); when present
   // the overlay draws the guide gauge and advances its target off elapsedSec while the web is frozen. Omitted → no guide gauge. The shell knows
   // the quirks of specific packages (e.g. Netflix's membership-gated launcher), so the web only supplies the package.
-  | { type: 'openApp'; pkg: string; elapsedSec?: number; outputKj?: number; weightKg?: number; plan?: { durationSec: number; targetW: number }[] }
+  // hidesNav marks an app that renders the system navigation bar translucent so it reads as a black strip with no buttons (SmartTube); the
+  // shell then draws its own opaque Back/Home pill at the bottom so the app stays navigable. Omitted/false for apps that show the bar normally.
+  | { type: 'openApp'; pkg: string; elapsedSec?: number; outputKj?: number; weightKg?: number; plan?: { durationSec: number; targetW: number }[]; hidesNav?: boolean }
   // Ask which of these packages are installed and launchable; the shell answers with an `apps` message. Sent once on connect.
   | { type: 'queryApps'; pkgs: string[] }
+  // Ask for every launchable app on the device (label + icon); the shell answers with an `installedApps` message. Sent when the "Add an app"
+  // picker opens, so a rider can add any sideloaded app to the home screen beyond the built-in catalog.
+  | { type: 'queryInstalledApps' }
   | { type: 'closeOverlay' }
   // Set device audio volume / screen brightness, each a level 0..1. The shell clamps and applies them, then echoes a `levels` message.
   | { type: 'setVolume'; level: number }
@@ -136,6 +144,14 @@ export function parseShellMessage(raw: unknown): ShellMessage | null {
         : null
     case 'apps':
       return Array.isArray(o.installed) && (o.installed as unknown[]).every((p) => typeof p === 'string') ? (o as ShellMessage) : null
+    case 'installedApps':
+      return Array.isArray(o.apps) &&
+        (o.apps as unknown[]).every((a) => {
+          const r = a as Record<string, unknown>
+          return r && typeof r === 'object' && typeof r.pkg === 'string' && typeof r.label === 'string' && (r.icon === undefined || typeof r.icon === 'string')
+        })
+        ? (o as ShellMessage)
+        : null
     default:
       return null
   }

@@ -44,6 +44,17 @@ appops set "$PKG" SYSTEM_ALERT_WINDOW allow && ok "draw over other apps"
 appops set "$PKG" android:get_usage_stats allow && ok "usage access (kiosk guard)"
 # Change screen brightness from the HUD's slider.
 appops set "$PKG" android:write_settings allow && ok "change brightness"
+# Let the overlay's Back button step back inside full-screen apps like SmartTube, which hide the system nav bar and have no on-screen Back.
+# The service observes nothing; it only performs a system Back on request. Undo: settings put secure enabled_accessibility_services ""
+A11Y="$PKG/$PKG.BackAccessibilityService"
+CUR="$(settings get secure enabled_accessibility_services 2>/dev/null)"
+case ":$CUR:" in
+  *":$A11Y:"*) ok "overlay Back (already enabled)" ;;
+  *)
+    if [ -z "$CUR" ] || [ "$CUR" = "null" ]; then NEW="$A11Y"; else NEW="$CUR:$A11Y"; fi
+    settings put secure enabled_accessibility_services "$NEW" && settings put secure accessibility_enabled 1 && ok "overlay Back button (accessibility)"
+    ;;
+esac
 
 echo
 echo "Safety:"

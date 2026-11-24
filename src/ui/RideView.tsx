@@ -97,7 +97,7 @@ function AddPlan({ onPick }: { onPick: (w: Workout) => void }) {
   return (
     <div className="guide-add">
       <button className="guide-add-btn" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
-        ＋ Power plan
+        + Power plan
       </button>
       {open ? (
         <ul className="guide-add-menu">

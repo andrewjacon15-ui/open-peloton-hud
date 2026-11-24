@@ -82,6 +82,16 @@ export function simulatedBridge(opts: { now?: () => number; every?: Every } = {}
       } else if (command.type === 'queryApps') {
         // Pretend every catalog app is installed, so the home screen's app buttons are testable in the browser.
         emit({ type: 'apps', installed: command.pkgs })
+      } else if (command.type === 'queryInstalledApps') {
+        // A couple of non-catalog apps so the "Add an app" picker is testable in the browser (no icons — the fallback mark shows).
+        emit({
+          type: 'installedApps',
+          apps: [
+            { pkg: 'com.spotify.music', label: 'Spotify' },
+            { pkg: 'com.google.android.youtube.tv', label: 'YouTube TV' },
+            { pkg: 'org.videolan.vlc', label: 'VLC' },
+          ],
+        })
       }
     },
   }

@@ -23,8 +23,8 @@ import kotlin.math.roundToInt
  * near-black ground with a hairline, quiet condensed labels, steady tabular values, and Peloton red reserved for live power and the
  * filled Start button.
  *
- * Unlike the web bar there is no Back button here: Netflix and Kindle are their own apps, so stepping back is the native app's own job (its
- * back gesture/button, which returns to the HUD). Back only makes sense for the in-WebView YouTube player, where it drops to the picker.
+ * Back performs a system-wide back through BackAccessibilityService, so it works even in full-screen apps like SmartTube that hide the system
+ * navigation bar and offer no on-screen Back of their own; where the service isn't enabled it falls back to returning to the HUD.
  *
  * The bar can also be collapsed (the chevron control): it tucks away to a thin pull-down handle so a book's top line isn't covered while
  * reading, and the handle brings it back. This is the one thing the web bar doesn't need — the web bar sits above the content in normal flow,
@@ -39,6 +39,7 @@ import kotlin.math.roundToInt
 class NetflixOverlay(
     private val context: Context,
     private val onHome: () -> Unit,
+    private val onBack: () -> Unit = {},
     private val onToggleRide: () -> Unit = {},
     private val onSetVolume: (Double) -> Unit = {},
     private val onSetBrightness: (Double) -> Unit = {},
@@ -59,6 +60,7 @@ class NetflixOverlay(
     private var barGroup: View? = null // the full bar (stats + controls + hairline), hidden when collapsed for reading
     private var handleView: View? = null // the thin pull-down tab shown when collapsed, to bring the bar back
     private var collapsed = false
+    private var navRoot: View? = null // a second window: an opaque Back/Home pill at the bottom, for apps that render the system nav bar translucent (SmartTube)
 
     // The guide (power plan) panel: a second small window at the top-right drawing the power gauge over Netflix/Kindle, the native twin of
     // the web GuideOverlay. Driven by `plan` (segment durations + watt targets) walked against elapsedSec, so it advances while the web is
@@ -81,7 +83,7 @@ class NetflixOverlay(
      * @param seedWeightKg the rider weight, so CAL matches the web's weight-based calories.
      * @param recording whether a ride is recording — decides the Start/Stop label.
      */
-    fun show(seedElapsedSec: Int, seedOutputKj: Double, seedWeightKg: Double, recording: Boolean, plan: List<PlanSeg> = emptyList()) {
+    fun show(seedElapsedSec: Int, seedOutputKj: Double, seedWeightKg: Double, recording: Boolean, plan: List<PlanSeg> = emptyList(), needsNav: Boolean = false) {
         if (root != null) return
         elapsedSec = seedElapsedSec
         outputKj = seedOutputKj
@@ -100,9 +102,11 @@ class NetflixOverlay(
         stats.addView(stat("OUTPUT", "kJ"), gap())
         stats.addView(stat("CAL", "kcal"), gap())
 
-        // No Back here (that's the native app's own job) — just Home, Start/Stop, and the sliders popout, drawn with the same icons as the web bar.
+        // Back, Home, Start/Stop, and the sliders popout, drawn with the same icons as the web bar. Back performs a system-wide back (via the
+        // accessibility service) so it works even inside full-screen apps like SmartTube that hide the system nav bar; Home returns to the HUD.
         val controls = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        controls.addView(iconButton(R.drawable.ic_obar_home) { onHome() })
+        controls.addView(iconButton(R.drawable.ic_obar_back) { onBack() })
+        controls.addView(iconButton(R.drawable.ic_obar_home, marginStart = dp(8)) { onHome() })
         controls.addView(startStopButton(), LinearLayout.LayoutParams(WRAP, WRAP).apply { marginStart = dp(8) })
         controls.addView(iconButton(R.drawable.ic_obar_sliders, marginStart = dp(8)) { toggleLevels() })
         // Tuck the whole bar away for reading (Kindle draws text to the top edge); a thin handle brings it back.
@@ -155,11 +159,14 @@ class NetflixOverlay(
         wm.addView(root, lp)
         this.root = root
         this.rootLp = lp
+        liveRoot = root // track at process level so a HUD resume can remove an overlay even if a prior activity instance owned it (orphan-safe)
+        liveWm = wm
         renderTime()
         renderOutput()
         renderCalories()
         renderAvgPower()
         if (plan.isNotEmpty()) showGaugePanel()
+        if (needsNav) showNavStrip()
         renderGauge()
     }
 
@@ -210,10 +217,16 @@ class NetflixOverlay(
     }
 
     fun hide() {
+        if (liveRoot === root) liveRoot = null
+        if (liveGauge === gaugeRoot) liveGauge = null
+        if (liveNav === navRoot) liveNav = null
+        if (liveRoot == null && liveGauge == null && liveNav == null) liveWm = null
         root?.let { runCatching { wm.removeView(it) } }
         gaugeRoot?.let { runCatching { wm.removeView(it) } }
+        navRoot?.let { runCatching { wm.removeView(it) } }
         root = null
         rootLp = null
+        navRoot = null
         values.clear()
         toggleBtn = null
         avgPowerView = null
@@ -337,6 +350,43 @@ class NetflixOverlay(
         }
         wm.addView(panel, lp)
         gaugeRoot = panel
+        liveGauge = panel
+    }
+
+    /**
+     * A second always-on window: an opaque Back/Home pill centered at the bottom edge, where the system navigation bar sits. Shown only for
+     * apps that render the system nav bar translucent so it reads as a black strip with no buttons (SmartTube — it sets TRANSLUCENT_NAVIGATION
+     * + LAYOUT_HIDE_NAVIGATION, so the real bar is on top but invisible). This draws our own visible one over it. Back is the same system-wide
+     * back as the top bar (BackAccessibilityService), so it steps back inside SmartTube; Home returns to the HUD. Kept visible when the top bar
+     * is collapsed for reading — a reading app wouldn't set needsNav anyway.
+     */
+    private fun showNavStrip() {
+        if (navRoot != null) return
+        val pill = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            background = GradientDrawable().apply {
+                cornerRadius = dp(14).toFloat()
+                setColor(BG) // opaque so the buttons read over the app's own black nav area
+                setStroke(dp(1), BTN_BORDER)
+            }
+            setPadding(dp(10), dp(8), dp(10), dp(8))
+            addView(iconButton(R.drawable.ic_obar_back) { onBack() })
+            addView(iconButton(R.drawable.ic_obar_home, marginStart = dp(8)) { onHome() })
+        }
+        val lp = WindowManager.LayoutParams(
+            WRAP,
+            WRAP,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            PixelFormat.TRANSLUCENT,
+        ).apply {
+            gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+            y = dp(10) // float just above the bottom edge, clear of the (invisible) system bar
+        }
+        wm.addView(pill, lp)
+        navRoot = pill
+        liveNav = pill
     }
 
     /** One label-over-value column; the value is Peloton red only for live power, the unit smaller and muted — matches `.obar-stat`.
@@ -493,7 +543,31 @@ class NetflixOverlay(
     private fun gap() = LinearLayout.LayoutParams(WRAP, WRAP).apply { marginStart = dp(34) }
     private fun dp(v: Int) = (v * context.resources.displayMetrics.density).toInt()
 
-    private companion object {
+    companion object {
+        // The single overlay window currently attached, tracked at process level. If an activity instance is destroyed without hiding the
+        // overlay (leaving an orphaned system window over the HUD), a new instance can still remove it via dismissStale() — see MainActivity.
+        @Volatile private var liveRoot: View? = null
+        @Volatile private var liveGauge: View? = null
+        @Volatile private var liveNav: View? = null
+        @Volatile private var liveWm: WindowManager? = null
+
+        /** Remove any overlay window still attached, including one left behind by a destroyed activity. Returns true if it removed anything. */
+        fun dismissStale(context: Context): Boolean {
+            val r = liveRoot
+            val g = liveGauge
+            val n = liveNav
+            if (r == null && g == null && n == null) return false
+            val wm = liveWm ?: context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+            r?.let { runCatching { wm.removeView(it) } }
+            g?.let { runCatching { wm.removeView(it) } }
+            n?.let { runCatching { wm.removeView(it) } }
+            liveRoot = null
+            liveGauge = null
+            liveNav = null
+            liveWm = null
+            return true
+        }
+
         const val MATCH = WindowManager.LayoutParams.MATCH_PARENT
         const val WRAP = WindowManager.LayoutParams.WRAP_CONTENT
         // Must match src/domain/metrics.ts so the overlay's CAL equals the web's.

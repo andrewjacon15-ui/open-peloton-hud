@@ -49,6 +49,46 @@ export function useDeviceInfo(): DeviceInfo | null {
   return state
 }
 
+// Every launchable app on the device (label + icon), for Settings → Apps "Add an app". Fetched on demand (when the picker opens) rather than
+// on connect, since rasterizing every icon is heavier than the catalog's installed-set check and isn't needed until the rider adds an app.
+export interface InstalledApp {
+  pkg: string
+  label: string
+  icon?: string
+}
+let allInstalled: InstalledApp[] | null = null
+const allListeners = new Set<(a: InstalledApp[]) => void>()
+let watchingAll = false
+
+/** Ask the shell for every launchable app (answered with `installedApps`), wiring the listener once. Called when the picker opens. */
+export function requestInstalledApps(): void {
+  const bridge = getBridge()
+  if (!watchingAll) {
+    watchingAll = true
+    bridge.subscribe((m) => {
+      if (m.type === 'installedApps') {
+        allInstalled = m.apps
+        allListeners.forEach((l) => l(m.apps))
+      }
+    })
+  }
+  bridge.send({ type: 'queryInstalledApps' })
+}
+
+/** Every launchable app on the device (null until the shell answers; an older shell that doesn't answer leaves it null → the picker says so). */
+export function useAllInstalledApps(): InstalledApp[] | null {
+  const [state, setState] = useState(allInstalled)
+  useEffect(() => {
+    allListeners.add(setState)
+    requestInstalledApps()
+    if (allInstalled) setState(allInstalled)
+    return () => {
+      allListeners.delete(setState)
+    }
+  }, [])
+  return state
+}
+
 /** The set of installed media-app packages the shell reported (null until it first answers). */
 export function useInstalledApps(): Set<string> | null {
   const [state, setState] = useState(installed)

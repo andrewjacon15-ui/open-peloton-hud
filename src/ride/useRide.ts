@@ -5,6 +5,7 @@ import type { MetricSample, RideMetrics } from '../domain/metrics'
 import { RideRecorder, type RideState, type RideSummary } from './recorder'
 import { downsampleSeries } from './series'
 import { addRide, loadRides, loadSettings, saveSettings, type RideSettings, type StoredRide } from './storage'
+import { subscribeProfiles } from './profiles'
 
 export interface RideView {
   /** The sensor the shell reported, and whether a reading has arrived. */
@@ -79,6 +80,18 @@ export function useRide(): RideView & {
       } else if (m.type === 'error') setError(`${m.code}: ${m.message}`)
     })
   }, [bridge, recorder])
+
+  // Switching the active rider profile (Settings → Profiles) swaps in that profile's own settings and ride history. It only happens off-ride
+  // (the UI blocks it mid-ride), so clear the recorder and reload both from the newly-active profile's storage keys.
+  useEffect(() => {
+    return subscribeProfiles(() => {
+      recorder.reset()
+      setSettings(loadSettings())
+      setRides(loadRides())
+      setLastSummary(null)
+      setTickState({ state: recorder.state, rideId: recorder.rideId, elapsedSec: 0, liveSample: live.current })
+    })
+  }, [recorder])
 
   // One tick a second: record the latest reading and publish a fresh snapshot.
   useEffect(() => {

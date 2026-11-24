@@ -44,6 +44,17 @@ object Messages {
         return JSONObject().put("type", "apps").put("installed", arr).toString()
     }
 
+    /** A launchable app the user could add as a custom home tile: its package, display label, and (optional) launcher icon as a PNG data URL. */
+    data class InstalledApp(val pkg: String, val label: String, val icon: String?)
+
+    /** Settings → Apps "Add an app": every launchable app on the device (minus our own and Peloton's own launcher), each with its real icon,
+     *  so the web can offer any installed app as a home tile — the HUD is extensible to any sideloaded APK, not just the built-in catalog. */
+    fun installedApps(apps: List<InstalledApp>): String {
+        val arr = JSONArray()
+        for (a in apps) arr.put(JSONObject().put("pkg", a.pkg).put("label", a.label).apply { if (a.icon != null) put("icon", a.icon) })
+        return JSONObject().put("type", "installedApps").put("apps", arr).toString()
+    }
+
     /** Settings → Sensor: the source in use ("internal" or a Bluetooth address), whether a scan is running, what it found, any problem. */
     fun sensors(current: String, currentName: String, scanning: Boolean, devices: List<BleScanner.Found>, error: String? = null): String {
         val arr = JSONArray()

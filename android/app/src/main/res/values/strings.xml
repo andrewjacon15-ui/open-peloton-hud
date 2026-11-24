@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Shown in Android's accessibility settings for BackAccessibilityService (the HUD enables it over adb; this just explains what it is). -->
+    <string name="back_accessibility_desc">Lets the Peloton HUD overlay\'s Back button step back inside full-screen apps (e.g. SmartTube) that hide the system navigation bar. It observes nothing and reads no screen content.</string>
+</resources>

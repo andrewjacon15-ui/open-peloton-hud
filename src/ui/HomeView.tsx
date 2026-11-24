@@ -1,10 +1,8 @@
-import { useEffect } from 'react'
+import { useState } from 'react'
 import { speedMsFromPower } from '../domain/metrics'
 import type { useRide } from '../ride/useRide'
 import type { StoredRide } from '../ride/storage'
 import type { MediaApp } from '../media/apps'
-import { loadSubscriptions } from '../media/subscriptions'
-import { prefetchSubscriptionFeed } from '../media/youtubeApi'
 import { DeviceControls } from './DeviceControls'
 import { RideStats, Stat, Zones, hms, miles } from './stats'
 
@@ -34,6 +32,32 @@ const GearIcon = () => (
     <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
   </svg>
 )
+
+/** An app tile's icon: the app's own logo, falling back to its short mark if the logo image is missing (e.g. a fresh clone without the
+ *  gitignored logo assets, or a load error). */
+function AppTileIcon({ app }: { app: MediaApp }) {
+  // Show the short mark first, then swap in the real logo once it has actually decoded — so a rider without the (gitignored) logo files, or a
+  // slow/failed load, always sees the clean coloured mark and never a broken-image box. The <img> still renders (hidden) so it can load.
+  const [ok, setOk] = useState(false)
+  const [failed, setFailed] = useState(false)
+  const useLogo = Boolean(app.logo) && !failed
+  return (
+    <>
+      {(!useLogo || !ok) && <span className="app-mark">{app.mark}</span>}
+      {useLogo && (
+        <img
+          className="app-logo"
+          src={app.logo}
+          alt=""
+          aria-hidden="true"
+          style={ok ? undefined : { display: 'none' }}
+          onLoad={() => setOk(true)}
+          onError={() => setFailed(true)}
+        />
+      )}
+    </>
+  )
+}
 
 function RecentRides({ rides, imperial, onSelect, onHistory }: { rides: StoredRide[]; imperial: boolean; onSelect: (r: StoredRide) => void; onHistory: () => void }) {
   if (!rides.length) return null
@@ -104,11 +128,6 @@ export function HomeView({
   const liveSpeed = speedMsFromPower(live.power, (ride.settings.weightKg ?? 75) + 9) * 3.6 * (imperial ? 0.621371 : 1)
   const summary = ride.state === 'done' ? ride.lastSummary : null
 
-  // Warm the subscription feed while the user is on the home screen, so opening YouTube paints instantly instead of waiting ~7s.
-  useEffect(() => {
-    prefetchSubscriptionFeed(loadSubscriptions().map((c) => c.id))
-  }, [])
-
   return (
     <main className="app">
       <header className="home-head">
@@ -154,25 +173,26 @@ export function HomeView({
         )}
       </section>
 
-      {/* One tile per installed + enabled media app (Settings → Apps), in an even grid. Each wears its service's brand colour so they read
-          as distinct launchers; updates automatically as apps are added or toggled. */}
-      {apps.length > 0 && (
-        <section className="app-grid">
-          {apps.map((app) => (
-            <button key={app.id} className="app-tile" style={{ ['--brand' as string]: app.brand }} onClick={() => onApp(app)}>
-              <span className="app-mark">{app.mark}</span>
-              <span className="app-name">{app.name}</span>
-            </button>
-          ))}
-        </section>
-      )}
-
+      {/* The two primary actions sit together, same full width and height: start a free ride, or pick a structured ride. */}
       <button className="cta-wide cta-rides" onClick={onRides}>
         <span className="cta-ico">
           <RouteIcon />
         </span>
         <span className="cta-text">Rides — scenic routes &amp; workouts</span>
       </button>
+
+      {/* One tile per installed + enabled media app (Settings → Apps), in an even grid. Each wears its service's brand colour so they read
+          as distinct launchers; updates automatically as apps are added or toggled. */}
+      {apps.length > 0 && (
+        <section className="app-grid">
+          {apps.map((app) => (
+            <button key={app.id} className="app-tile" style={{ ['--brand' as string]: app.brand }} onClick={() => onApp(app)}>
+              <AppTileIcon app={app} />
+              <span className="app-name">{app.name}</span>
+            </button>
+          ))}
+        </section>
+      )}
 
       <DeviceControls />
 

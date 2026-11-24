@@ -5,7 +5,8 @@
  * YouTube ship on the bike — the rest are sideloaded by the owner. Pure data + the enable/disable store; no React, no bridge.
  *
  * The in-WebView YouTube player (src/media/useMedia.ts openYouTube) is a separate thing: it exists for guided rides (a power gauge over a
- * scenic video), not general watching. For just watching YouTube, this catalog's native YouTube app is the better surface.
+ * scenic video), not general watching. For just watching YouTube, the catalog's "YouTube" tile launches SmartTube — a native,
+ * Google-services-free YouTube client — when it's installed, and otherwise opens the in-HUD player.
  */
 export interface MediaApp {
   /** Stable id used for the enable/disable store and icons. */
@@ -14,31 +15,38 @@ export interface MediaApp {
   /** Android package name the shell launches and checks for. */
   pkg: string
   kind: 'video' | 'reading'
-  /** The service's brand accent colour, so each launch tile looks distinct and on-brand (we use the colour + a plain mark, not the logo). */
+  /** The service's brand accent colour, used as a subtle tile tint/accent behind the app's own logo. */
   brand: string
-  /** A short original mark for the tile (1–2 chars); defaults to the name's initial. */
+  /** A short mark for the tile (1–2 chars), shown only as a fallback when the logo image is missing. */
   mark: string
+  /** The app's own logo, shown on its launcher tile (public/logos/*; gitignored proprietary assets, so a fresh clone falls back to `mark`). */
+  logo?: string
   /**
-   * This app has an in-HUD web player to fall back to when the native app isn't installed (YouTube). The original Peloton Bike has no
-   * Google Play Services, so there is no native YouTube app to sign into — the web player is the only way to watch there. So a web-player
-   * app always shows on the home screen; its button launches the native app where one exists (e.g. a Bike+ with a sideloaded YouTube), and
-   * otherwise opens the in-HUD player. The web player is also what guided rides draw the power gauge over.
+   * This app has an in-HUD web player to fall back to when the native app isn't installed. The original Peloton Bike has no Google Play
+   * Services, so a web-player app always shows on the home screen; its button launches the native app where `pkg` is installed, and otherwise
+   * opens the in-HUD player. The web player is also what guided rides draw the power gauge over.
    */
   webPlayer?: boolean
+  /**
+   * This app renders the system navigation bar translucent (it sets TRANSLUCENT_NAVIGATION + LAYOUT_HIDE_NAVIGATION), so on the bike the
+   * Peloton nav bar is still present and on top but reads as a black strip with no buttons — leaving the app hard to navigate. When set, the
+   * shell draws its own opaque Back/Home pill at the bottom over it (NetflixOverlay.showNavStrip). SmartTube (the YouTube tile) does this.
+   */
+  hidesNav?: boolean
 }
 
 export const MEDIA_APPS: MediaApp[] = [
-  // YouTube: the in-HUD web player always works (webPlayer); if a native YouTube is installed its button launches that instead. On a bike with
-  // no Google Play Services, the official YouTube app can't sign in — SmartTube (below) is the native, Google-services-free alternative.
-  { id: 'youtube', name: 'YouTube', pkg: 'com.google.android.youtube', kind: 'video', webPlayer: true, brand: '#FF3D34', mark: 'YT' },
-  // SmartTube Beta's package (the actively-maintained build; stable SmartTube is com.teamsmart.videomanager.tv).
-  { id: 'smarttube', name: 'SmartTube', pkg: 'org.smarttube.beta', kind: 'video', brand: '#FF8A3D', mark: 'ST' },
-  { id: 'netflix', name: 'Netflix', pkg: 'com.netflix.mediaclient', kind: 'video', brand: '#B81D24', mark: 'N' },
-  { id: 'prime', name: 'Prime Video', pkg: 'com.amazon.avod.thirdpartyclient', kind: 'video', brand: '#1FA2E8', mark: 'PV' },
-  { id: 'disney', name: 'Disney+', pkg: 'com.disney.disneyplus', kind: 'video', brand: '#2B6CF6', mark: 'D+' },
-  { id: 'max', name: 'Max', pkg: 'com.wbd.stream', kind: 'video', brand: '#8A5CFF', mark: 'M' },
-  { id: 'hulu', name: 'Hulu', pkg: 'com.hulu.plus', kind: 'video', brand: '#1CE783', mark: 'H' },
-  { id: 'kindle', name: 'Kindle', pkg: 'com.amazon.kindle', kind: 'reading', brand: '#2BB3C0', mark: 'K' },
+  // One YouTube: the tile wears the YouTube logo but launches SmartTube (org.smarttube.beta, the Google-services-free native YouTube client)
+  // when it's installed — the official YouTube app can't sign in on this bike (no Play Services). With SmartTube absent it falls back to the
+  // in-HUD web player (webPlayer). The in-HUD player is still what guided rides ride over, regardless of this tile.
+  { id: 'youtube', name: 'YouTube', pkg: 'org.smarttube.beta', kind: 'video', webPlayer: true, hidesNav: true, brand: '#FF3D34', mark: 'YT', logo: '/logos/youtube.png' },
+  { id: 'netflix', name: 'Netflix', pkg: 'com.netflix.mediaclient', kind: 'video', brand: '#B81D24', mark: 'N', logo: '/logos/netflix.png' },
+  { id: 'prime', name: 'Prime Video', pkg: 'com.amazon.avod.thirdpartyclient', kind: 'video', brand: '#1FA2E8', mark: 'PV', logo: '/logos/prime.png' },
+  { id: 'disney', name: 'Disney+', pkg: 'com.disney.disneyplus', kind: 'video', brand: '#2B6CF6', mark: 'D+', logo: '/logos/disney.png' },
+  { id: 'max', name: 'Max', pkg: 'com.wbd.stream', kind: 'video', brand: '#8A5CFF', mark: 'M', logo: '/logos/max.png' },
+  { id: 'peacock', name: 'Peacock', pkg: 'com.peacocktv.peacockandroid', kind: 'video', brand: '#6C47FF', mark: 'P', logo: '/logos/peacock.png' },
+  { id: 'hulu', name: 'Hulu', pkg: 'com.hulu.plus', kind: 'video', brand: '#1CE783', mark: 'H', logo: '/logos/hulu.jpg' },
+  { id: 'kindle', name: 'Kindle', pkg: 'com.amazon.kindle', kind: 'reading', brand: '#2BB3C0', mark: 'K', logo: '/logos/kindle.png' },
 ]
 
 export const appByPkg = (pkg: string): MediaApp | undefined => MEDIA_APPS.find((a) => a.pkg === pkg)

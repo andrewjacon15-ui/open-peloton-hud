@@ -79,6 +79,17 @@ export class RideRecorder {
     this.media = media
   }
 
+  /** Clear the recorder back to a fresh idle state (no ride, no samples). Used when switching rider profile, which only happens off-ride. */
+  reset(): void {
+    this.state = 'idle'
+    this.rideId = ''
+    this.startedAt = 0
+    this.endedAt = null
+    this.samples = []
+    this.zeroCadenceSec = 0
+    this.media = { kind: 'none' }
+  }
+
   /** Call once a second with the latest reading. Records it while active and handles auto-pause/resume. */
   tick(sample: MetricSample): void {
     if (this.state === 'paused') {

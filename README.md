@@ -31,11 +31,12 @@ Only **Netflix** comes on the bike. Everything else you sideload (the installer 
 | App | Notes |
 |---|---|
 | Netflix | Pre-installed; the one Peloton ships. |
-| YouTube | A built-in player (also what guided rides ride over). For a native app, sideload **SmartTube** (Google's own app needs Play Services). |
-| Prime Video, Disney+, Max, Hulu | Sideload from a trusted source (e.g. APKMirror); each uses its own sign-in. |
+| YouTube | The YouTube button launches **SmartTube** (a Google-services-free native YouTube client) when it's installed; otherwise a built-in web player (also what guided rides ride over). The official YouTube app needs Play Services, which the bike lacks. |
+| Prime Video, Disney+, Max, Hulu, Peacock | Sideload from a trusted source (e.g. APKMirror); each uses its own sign-in. |
 | Kindle | Sideload; read with your stats around the page. |
 
-Sign into each app once on the bike. **Video may be standard-definition** on some apps — the bike isn't Google-certified for HD DRM.
+Sign into each app once on the bike. The stats bar's **‹ Back** and **Home** buttons navigate even in full-screen apps (like SmartTube)
+that hide the system nav bar. **Video may be standard-definition** on some apps — the bike isn't Google-certified for HD DRM.
 
 ## Known limitations
 
@@ -49,7 +50,7 @@ Sign into each app once on the bike. **Video may be standard-definition** on som
 ## Privacy
 
 No account, no cloud, no telemetry. Rides and settings live in the WebView's local storage on the bike and never leave it. The repo carries
-no keys; personal data (your YouTube subscriptions, your bike's details) stays in gitignored files on your own machine.
+no keys; personal data stays in gitignored files on your own machine.
 
 ## For developers
 
